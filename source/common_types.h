@@ -1,0 +1,43 @@
+#ifndef COMMON_TYPES_H
+#define COMMON_TYPES_H
+
+#include <stdint.h>
+
+typedef enum {
+    E_OK,
+    E_NOT_OK
+} ReturnType;
+
+typedef struct {
+    uint8_t m_x0;
+    uint8_t m_y0;
+    uint8_t m_x1;
+    uint8_t m_y1;
+    uint8_t m_index;
+    uint8_t m_flags;
+} VectorType;
+
+typedef struct {
+    float Kp;
+    float Ki;
+    float Kd;
+    float integral;
+    float max_integral;
+    float previous_error;
+    float output_max;
+} PIDController;
+
+extern PIDController pid_steering;
+extern PIDController pid_brushed;
+
+typedef enum {
+    STATE_INIT,
+    STATE_WAIT,
+    STATE_CHECK_OBSTACLE,
+    STATE_READ_CAMERA,
+    STATE_PROCESS_VECTOR,
+    STATE_CONTROL,
+    STATE_STOP
+} SystemState;
+
+#endif // COMMON_TYPES_H

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/catalinux/Licenta/mcuxpresso/Licenta-uart/Licenta_UART -type f -name README* -o -name CLAUDE* -o -name .cursor -o -name Makefile -o -name CMakeLists.txt)"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+/Debug/
+/Release/
+/build/
+/out/
+
+*.o
+*.d
+*.axf
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.log
+
+.settings/
+.metadata/
+
+.project
+.cproject
+
+# Optional: keep these if you want shared IDE config
+# !.project
+# !.cproject
+
+*.launch
+
+*.tmp
+*.bak
+*.swp
+*~
+
+.DS_Store
+Thumbs.db
+
+*.crf
+*.su
+*.opd
+*.srec
+
+*.ld~
