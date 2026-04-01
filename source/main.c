@@ -65,12 +65,6 @@ int main(void)
 
         switch (currentState)
         {
-            case STATE_INIT:
-                InitGlobals();
-                Init_Peripherals();
-                currentState = STATE_WAIT;
-                break;
-
             case STATE_WAIT:
                 if (stop)
                 {

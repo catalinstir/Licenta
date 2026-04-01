@@ -32,7 +32,7 @@ void PID_Init(PIDController *pid, float kp, float ki, float kd, float output_max
 void InitGlobals(void)
 {
     stop            = 0;
-    currentState    = STATE_INIT;
+    currentState    = STATE_WAIT;
     check_obstacle  = false;
     simulator       = false;
     uart_data_ready = false;

@@ -33,7 +33,6 @@ typedef struct {
 } MotorCommand_t;
 
 typedef enum {
-    STATE_INIT,
     STATE_WAIT,
     STATE_CHECK_OBSTACLE,
     STATE_READ_CAMERA,
