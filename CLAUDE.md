@@ -15,7 +15,7 @@ cd Debug
 make clean && make all
 ```
 
-Toolchain: `arm-none-eabi-gcc` (must be on PATH). Output: `Debug/Licenta_UART.axf`.
+Toolchain: `arm-none-eabi-gcc` (must be on PATH). Output: `Debug/LicentaV1.axf`.
 
 To flash and debug, use MCUXpresso IDE or OpenOCD with the FRDM-K66F's OpenSDA interface.
 
@@ -69,19 +69,35 @@ STATE_INIT → STATE_WAIT → STATE_CHECK_OBSTACLE → STATE_READ_CAMERA
 | PTA6 / PTC1 | Ultrasonic trigger / echo |
 | PTB4 (ADC1_SE10) | Battery voltage ADC |
 
-### PID Tuning Constants (`source/config.h`)
+### PID Tuning (`source/globals.c`)
 
-- Kp = 0.045, Ki = 0.0, Kd = 0.06
-- Center reference: X = 39.0 pixels
-- Steering PWM steps: {500, 600, 700, 800, 900}
-- Speed: `PWM_MAX_SPEED` when straight, `PWM_MIN_SPEED` during steering
+PID gains are set in `InitGlobals()`, **not** in `config.h`. `config.h` only holds `CENTER_X = 39.0f`.
+
+- Active: `Kp=0.045, Ki=0.0, Kd=0.06` (hardware-tuned)
+- Commented-out alternatives exist for simulator tuning
+- PWM limits (`PWM_MIN_SPEED`, `PWM_MAX_SPEED`) are also set in `InitGlobals()`, currently both `7.7f`
+
+### PWM Representation
+
+All PWM duty cycle values are stored as **percentage × 100** (e.g., `770` = 7.70% duty at 50 Hz ≈ 1.54 ms pulse). The discrete steering steps `{500, 600, 700, 800, 900}` and speed values follow this same convention. `MapControlToDutyCycle()` in `control_algorithms.c` converts the PID [-1, 1] output to these discrete steps.
+
+Each motor command in `ProcessVectorsPID()` sends a neutral pulse (8000 = center) then delays before applying the target value — this is intentional smoothing, not a bug.
+
+### Vector Processing Details
+
+- Vectors are **normalized** so `m_y0 >= m_y1` (bottom of image first) before use.
+- Camera image space is 128×128 pixels; `CENTER_X = 39.0` (calibrated to physical camera mount, not geometric center).
+- Lane classification uses slope sign: negative slope → left lane, positive slope → right lane.
+- If only one lane is visible, the missing lane defaults to a hard-coded edge position (left: x=0, right: x=78). If **no** valid vectors remain, `stop = 1` is set directly inside `vector_processing.c` — not by the state machine.
+- `HallSensor_Init()` is currently commented out in `Init_Peripherals()`; hall RPM feedback is computed but not used for speed control.
 
 ### Simulator Mode
 
-Set `simulator = true` in `globals.c`. The system then reads vectors from UART4 instead of the Pixy camera. Input format (8 space-separated integers, terminated by `\r`):
+Set `simulator = true` in `globals.c` (`InitGlobals()`). The system then reads vectors from UART4 instead of the Pixy camera. Input format (8 space-separated integers, terminated by `\r`):
 ```
 x0 y0 x1 y1 x0 y0 x1 y1\r
 ```
+In simulator mode, `ProcessVectorsPID()` also prints error/control/PWM values over UART for feedback.
 
 ### Board Support Files (`board/`)
 
