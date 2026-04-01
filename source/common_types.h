@@ -27,8 +27,10 @@ typedef struct {
     float output_max;
 } PIDController;
 
-extern PIDController pid_steering;
-extern PIDController pid_brushed;
+typedef struct {
+    uint16_t steer_duty;
+    uint16_t speed_duty;
+} MotorCommand_t;
 
 typedef enum {
     STATE_INIT,

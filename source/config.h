@@ -50,6 +50,22 @@
 /* ======================== DEFINE SETTINGS ======================== */
 #define CENTER_X 39.0f
 
+/* ======================== CONTROL TUNING ======================== */
+/* PWM steering limits (duty in percentage, stored as percentage × 100) */
+#define PWM_MIN       5.0f
+#define PWM_MAX       9.0f
+/* PWM speed limits */
+#define PWM_MIN_SPEED 7.7f
+#define PWM_MAX_SPEED 7.7f
+
+/* PID steering gains — hardware-tuned */
+#define PID_STEERING_KP  0.045f
+#define PID_STEERING_KI  0.0f
+#define PID_STEERING_KD  0.06f
+/* Simulator alternatives (swap in as needed):
+ * #define PID_STEERING_KP  0.035f  (simulator bun1)
+ * #define PID_STEERING_KP  0.04f   (simulator bun2) */
+
 /* ======================== ADC SETTINGS ======================== */
 #define ADC_BASE          ADC1
 #define ADC_CHANNEL_GROUP 0

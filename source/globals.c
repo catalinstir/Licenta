@@ -1,4 +1,5 @@
 #include "globals.h"
+#include "config.h"
 
 unsigned int stop;
 VectorType Vector1;
@@ -12,9 +13,6 @@ PIDController pid_steering;
 volatile bool uart_data_ready;
 volatile uint32_t lastRpmPrint;
 volatile uint32_t g_systemTime_ms;
-
-float PWM_MIN, PWM_MAX;
-float PWM_MIN_SPEED, PWM_MAX_SPEED;
 
 void PID_Init(PIDController *pid, float kp, float ki, float kd, float output_max)
 {
@@ -42,14 +40,5 @@ void InitGlobals(void)
     lastRpmPrint    = 0;
     g_systemTime_ms = 0;
 
-    PID_Init(&pid_steering, 0.045f, 0.0f, 0.06f, 1.0f); // testat real bun
-
-    // PID_Init(&pid_steering, 0.035f, 0.0f, 0.025f, 1.0f); // simulator bun1
-    // PID_Init(&pid_steering, 0.04f, 0.0f, 0.03f, 1.0f); // simulator bun2
-
-    // PWM limits
-    PWM_MIN       = 5.0f;
-    PWM_MAX       = 9.0f;
-    PWM_MIN_SPEED = 7.7f;
-    PWM_MAX_SPEED = 7.7f;
+    PID_Init(&pid_steering, PID_STEERING_KP, PID_STEERING_KI, PID_STEERING_KD, 1.0f);
 }

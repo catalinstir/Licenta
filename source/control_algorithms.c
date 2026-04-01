@@ -1,20 +1,6 @@
 #include "control_algorithms.h"
-
-void print_float(float num) {
-
-    float intpart;
-    float frac = modff(num, &intpart);
-    int integer_part = (int)intpart;
-    int decimal_part = (int)(fabsf(frac) * 1000.0f);
-
-    if (num < 0.0f && integer_part == 0) {
-        PRINTF("-0.%03d", decimal_part);
-    } else if (num < 0.0f) {
-        PRINTF("-%d.%03d", abs(integer_part), decimal_part);
-    } else {
-        PRINTF("%d.%03d", integer_part, decimal_part);
-    }
-}
+#include "fsl_debug_console.h"
+#include "utils.h"
 
 // PID
 uint16_t MapControlToDutyCycle(float control) {
@@ -98,39 +84,25 @@ float PID_Control(PIDController *pid, float error) {
     return control;
 }
 
-void ProcessVectorsPID(VectorType v1, VectorType v2) {
-
-    //     float x_1, y_1,x_2, y_2;
-    //     CalculateLaneCenter2(v1, v2, &x_1,&x_2,&y_1,&y_2);
-    //     float error = CalculateCombinedError(x_1,x_2);
+MotorCommand_t ProcessVectorsPID(VectorType v1, VectorType v2) {
 
     float x_center, y_center;
     CalculateLaneCenter(v1, v2, &x_center, &y_center);
     float error = CalculateError(x_center);
 
-    float control_steer = PID_Control(&pid_steering, error);
-    uint16_t duty_cycle = MapControlToDutyCycle(control_steer);
-
-    uint16_t speed_pwm = CalculateSpeedFromDuty(duty_cycle);
-    // uint16_t speed_pwm = CalculateSpeedFromControl(control_steer);
-
-    Motor_SetPwm(MOTOR_STEERING_FTM_BASEADDR, MOTOR_STEERING, 8000);
-    delay(DELAY_STEERING_RESET);
-    Motor_SetPwm(MOTOR_STEERING_FTM_BASEADDR, MOTOR_STEERING, duty_cycle);
-    delay(DELAY_STEERING_CMD);
-
-    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, 8000);
-    delay(DELAY_BRUSHED_RESET);
-    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, speed_pwm);
-    delay(DELAY_BRUSHED_CMD);
+    float control_steer    = PID_Control(&pid_steering, error);
+    uint16_t steer_duty    = MapControlToDutyCycle(control_steer);
+    uint16_t speed_duty    = CalculateSpeedFromDuty(steer_duty);
 
     if (simulator) {
         PRINTF("-ERR:");
         print_float(error);
         PRINTF(" CONTROL:");
         print_float(control_steer);
-        PRINTF(" STEER:%d SPEED:%d\r\n", duty_cycle, speed_pwm);
+        PRINTF(" STEER:%d SPEED:%d\r\n", steer_duty, speed_duty);
     }
+
+    return (MotorCommand_t){ .steer_duty = steer_duty, .speed_duty = speed_duty };
 }
 
 uint16_t CalculateSpeedFromDuty(uint16_t duty_cycle) {

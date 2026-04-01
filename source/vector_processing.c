@@ -90,7 +90,7 @@ uint8_t merge_connected_vectors(VectorType *input, uint8_t count, VectorType *ou
     return outCount;
 }
 
-void PreprocessVectors(VectorType *inputVectors, uint8_t inputCount, VectorType *leftLine,
+bool PreprocessVectors(VectorType *inputVectors, uint8_t inputCount, VectorType *leftLine,
                        VectorType *rightLine) {
     VectorType valid[8];
     VectorType merged[8];
@@ -105,8 +105,7 @@ void PreprocessVectors(VectorType *inputVectors, uint8_t inputCount, VectorType 
     if (validCount == 0) {
         mark_vector_invalid(leftLine);
         mark_vector_invalid(rightLine);
-        stop = 1;
-        return;
+        return false;
     }
     uint8_t mergedCount = merge_connected_vectors(valid, validCount, merged);
 
@@ -154,8 +153,7 @@ void PreprocessVectors(VectorType *inputVectors, uint8_t inputCount, VectorType 
     }
 
     if (is_vector_invalid(leftLine) && is_vector_invalid(rightLine)) {
-        stop = 1;
-    } else {
-        stop = 0;
+        return false;
     }
+    return true;
 }

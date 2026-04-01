@@ -4,8 +4,6 @@
 #include "common_types.h"
 #include "config.h"
 #include "globals.h"
-#include "motor_control.h"
-#include "fsl_debug_console.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -13,8 +11,6 @@
 /* =========================================================================
  * Existing PID interface — unchanged
  * ========================================================================= */
-
-void     print_float(float num);
 
 uint16_t MapControlToDutyCycle(float control);
 float    CalculateError(float x_center);
@@ -25,9 +21,9 @@ void     CalculateLaneCenter2(VectorType v1, VectorType v2,
 void     CalculateLaneCenter(VectorType v1, VectorType v2,
                               float *x_center, float *y_center);
 
-float    PID_Control(PIDController *pid, float error);
-void     ProcessVectorsPID(VectorType v1, VectorType v2);
-uint16_t CalculateSpeedFromDuty(uint16_t duty_cycle);
+float          PID_Control(PIDController *pid, float error);
+MotorCommand_t ProcessVectorsPID(VectorType v1, VectorType v2);
+uint16_t       CalculateSpeedFromDuty(uint16_t duty_cycle);
 uint16_t CalculateSpeedFromControl(float control);
 
 /* =========================================================================

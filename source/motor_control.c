@@ -59,3 +59,31 @@ ReturnType Motor_SetPwm(FTM_Type *ftmBaseAddress, ftm_chnl_t ftmCh, uint16_t dut
 
     return retValue;
 }
+
+void Motor_Stop(void) {
+    if (simulator) {
+        PRINTF("-STOP\r\n");
+    }
+    stop = 0;
+    Motor_SetPwm(MOTOR_STEERING_FTM_BASEADDR, MOTOR_STEERING, 8000);
+    delay(DELAY_STEERING_RESET);
+    Motor_SetPwm(MOTOR_STEERING_FTM_BASEADDR, MOTOR_STEERING, 700);
+    delay(DELAY_STEERING_CMD);
+
+    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, 8000);
+    delay(DELAY_BRUSHED_RESET);
+    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, 700);
+    delay(DELAY_BRUSHED_CMD);
+}
+
+void Motor_ApplyCommand(uint16_t steer_duty, uint16_t speed_duty) {
+    Motor_SetPwm(MOTOR_STEERING_FTM_BASEADDR, MOTOR_STEERING, 8000);
+    delay(DELAY_STEERING_RESET);
+    Motor_SetPwm(MOTOR_STEERING_FTM_BASEADDR, MOTOR_STEERING, steer_duty);
+    delay(DELAY_STEERING_CMD);
+
+    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, 8000);
+    delay(DELAY_BRUSHED_RESET);
+    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, speed_duty);
+    delay(DELAY_BRUSHED_CMD);
+}

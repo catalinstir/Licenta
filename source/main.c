@@ -26,11 +26,10 @@
 #include "stdio.h"
 #include "uart_handler.h"
 #include "ultrasonic_sensor.h"
+#include "utils.h"
 #include "vector_processing.h"
 
 void Init_Peripherals(void);
-void delay(uint32_t delay);
-void print_float(float num);
 
 
 /*******************************************************************************
@@ -85,9 +84,9 @@ int main(void)
 
             case STATE_CHECK_OBSTACLE:
                 check_obstacle = false;
-                if (!simulator)
+                if (!simulator && verificaObstacol())
                 {
-                    verificaObstacol();
+                    stop = 1;
                 }
                 if (stop)
                 {
@@ -125,7 +124,10 @@ int main(void)
                 break;
 
             case STATE_PROCESS_VECTOR:
-                PreprocessVectors(vectori, count, &Vector1, &Vector2);
+                if (!PreprocessVectors(vectori, count, &Vector1, &Vector2))
+                {
+                    stop = 1;
+                }
                 if (stop)
                 {
                     currentState = STATE_STOP;
@@ -137,12 +139,15 @@ int main(void)
                 break;
 
             case STATE_CONTROL:
-                ProcessVectorsPID(Vector1, Vector2);
+            {
+                MotorCommand_t cmd = ProcessVectorsPID(Vector1, Vector2);
+                Motor_ApplyCommand(cmd.steer_duty, cmd.speed_duty);
                 currentState = STATE_WAIT;
                 break;
+            }
 
             case STATE_STOP:
-                seteazaMotoareStop();
+                Motor_Stop();
                 currentState = STATE_WAIT;
                 break;
 
