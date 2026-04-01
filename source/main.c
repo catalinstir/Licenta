@@ -24,7 +24,6 @@
 #include "peripherals.h"
 #include "pin_mux.h"
 #include "stdio.h"
-#include "uart_handler.h"
 #include "ultrasonic_sensor.h"
 #include "utils.h"
 #include "vector_processing.h"
@@ -68,7 +67,7 @@ int main(void)
             case STATE_WAIT:
                 if (check_obstacle)
                 {
-                    if (!simulator && verificaObstacol())
+                    if (verificaObstacol())
                     {
                         stop = 1;
                     }
@@ -85,27 +84,13 @@ int main(void)
                 break;
 
             case STATE_READ_CAMERA:
-                if (simulator)
+                if (Pixy_GetVectors(vectori, &count) == E_OK)
                 {
-                    if (Simulator_GetFrame(vectori, &count))
-                    {
-                        currentState = STATE_PROCESS_VECTOR;
-                    }
-                    else
-                    {
-                        currentState = STATE_WAIT;
-                    }
+                    currentState = STATE_PROCESS_VECTOR;
                 }
                 else
                 {
-                    if (Pixy_GetVectors(vectori, &count) == E_OK)
-                    {
-                        currentState = STATE_PROCESS_VECTOR;
-                    }
-                    else
-                    {
-                        currentState = STATE_WAIT;
-                    }
+                    currentState = STATE_WAIT;
                 }
                 break;
 
@@ -155,8 +140,6 @@ void Init_Peripherals(void)
     BOARD_InitBootClocks();
     BOARD_InitDebugConsole();
 
-    UART_EnableInterrupts(UART4, kUART_RxDataRegFullInterruptEnable);
-    EnableIRQ(UART4_RX_TX_IRQn);
     BOARD_InitPeripherals();
 
     Motor_Init(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, 740);

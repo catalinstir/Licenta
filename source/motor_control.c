@@ -61,9 +61,6 @@ ReturnType Motor_SetPwm(FTM_Type *ftmBaseAddress, ftm_chnl_t ftmCh, uint16_t dut
 }
 
 void Motor_Stop(void) {
-    if (simulator) {
-        PRINTF("-STOP\r\n");
-    }
     stop = 0;
     Motor_SetPwm(MOTOR_STEERING_FTM_BASEADDR, MOTOR_STEERING, 8000);
     delay(DELAY_STEERING_RESET);

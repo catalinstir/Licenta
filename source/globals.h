@@ -13,10 +13,8 @@ extern VectorType vectori[8];
 extern volatile uint8_t count;
 extern volatile SystemState currentState;
 extern volatile bool check_obstacle;
-extern volatile bool simulator;
 extern PIDController pid_steering;
 extern PIDController pid_brushed;
-extern volatile bool uart_data_ready;
 extern volatile uint32_t lastRpmPrint;
 extern volatile uint32_t g_systemTime_ms;
 

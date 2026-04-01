@@ -1,6 +1,4 @@
 #include "control_algorithms.h"
-#include "fsl_debug_console.h"
-#include "utils.h"
 
 // PID
 uint16_t MapControlToDutyCycle(float control) {
@@ -93,14 +91,6 @@ MotorCommand_t ProcessVectorsPID(VectorType v1, VectorType v2) {
     float control_steer    = PID_Control(&pid_steering, error);
     uint16_t steer_duty    = MapControlToDutyCycle(control_steer);
     uint16_t speed_duty    = CalculateSpeedFromDuty(steer_duty);
-
-    if (simulator) {
-        PRINTF("-ERR:");
-        print_float(error);
-        PRINTF(" CONTROL:");
-        print_float(control_steer);
-        PRINTF(" STEER:%d SPEED:%d\r\n", steer_duty, speed_duty);
-    }
 
     return (MotorCommand_t){ .steer_duty = steer_duty, .speed_duty = speed_duty };
 }

@@ -8,9 +8,7 @@ VectorType vectori[8];
 volatile uint8_t count;
 volatile SystemState currentState;
 volatile bool check_obstacle;
-volatile bool simulator;
 PIDController pid_steering;
-volatile bool uart_data_ready;
 volatile uint32_t lastRpmPrint;
 volatile uint32_t g_systemTime_ms;
 
@@ -34,8 +32,6 @@ void InitGlobals(void)
     stop            = 0;
     currentState    = STATE_WAIT;
     check_obstacle  = false;
-    simulator       = false;
-    uart_data_ready = false;
     count           = 0;
     lastRpmPrint    = 0;
     g_systemTime_ms = 0;
