@@ -66,21 +66,13 @@ int main(void)
         switch (currentState)
         {
             case STATE_WAIT:
-                if (stop)
+                if (check_obstacle)
                 {
-                    currentState = STATE_STOP;
-                }
-                else if (check_obstacle)
-                {
-                    currentState = STATE_CHECK_OBSTACLE;
-                }
-                break;
-
-            case STATE_CHECK_OBSTACLE:
-                check_obstacle = false;
-                if (!simulator && verificaObstacol())
-                {
-                    stop = 1;
+                    if (!simulator && verificaObstacol())
+                    {
+                        stop = 1;
+                    }
+                    check_obstacle = false;
                 }
                 if (stop)
                 {

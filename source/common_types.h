@@ -34,7 +34,6 @@ typedef struct {
 
 typedef enum {
     STATE_WAIT,
-    STATE_CHECK_OBSTACLE,
     STATE_READ_CAMERA,
     STATE_PROCESS_VECTOR,
     STATE_CONTROL,
