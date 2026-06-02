@@ -20,6 +20,13 @@ extern volatile bool uart_data_ready;
 extern volatile uint32_t lastRpmPrint;
 extern volatile uint32_t g_systemTime_ms;
 
+extern volatile UARTPacketType uart_packet_type;
+extern volatile bool rc_enter_requested;
+extern volatile bool rc_packet_ready;
+extern volatile uint16_t rc_steer_cmd;
+extern volatile uint16_t rc_speed_cmd;
+extern volatile uint32_t rc_last_packet_ms;
+
 void PID_Init(PIDController *pid, float kp, float ki, float kd, float output_max);
 void InitGlobals(void);
 #endif /* GLOBALS_H_ */
