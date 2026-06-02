@@ -38,11 +38,14 @@ except ImportError:
 # PWM mapping constants — must match firmware config.h
 # ---------------------------------------------------------------------------
 STEER_NEUTRAL = 700
-STEER_MIN     = 500
-STEER_MAX     = 900
+STEER_MIN     = 900   # swapped: left stick left → steer left
+STEER_MAX     = 500
 
-SPEED_STOP    = 770   # duty×100 when trigger is fully released
-SPEED_MAX     = 790   # duty×100 at full trigger (conservative start)
+SPEED_STOPPED = 700   # duty×100 that parks the ESC (matches Motor_Stop final value)
+SPEED_MIN     = 770   # duty×100 at trigger threshold — slowest running speed
+SPEED_MAX     = 790   # duty×100 at full trigger press
+
+TRIGGER_DEADZONE = 10  # raw trigger units (0-255) below which we treat as released
 
 SEND_INTERVAL = 0.05  # 20 Hz — keeps firmware watchdog (500 ms) fed
 
@@ -70,7 +73,7 @@ def snap_steer(value: int) -> int:
 class State:
     def __init__(self):
         self.steer = STEER_NEUTRAL
-        self.speed = SPEED_STOP
+        self.speed = SPEED_STOPPED
         self.mode  = "auto"   # "auto" | "rc"
         self.stop  = False
         self.lock  = threading.Lock()
@@ -109,7 +112,11 @@ def controller_reader(state: State, done: threading.Event, debug: bool):
                             map_axis(ev.state, -32768, 32767, STEER_MIN, STEER_MAX)
                         )
                     elif ev.code == ABS_RZ:
-                        state.speed = map_axis(ev.state, 0, 255, SPEED_STOP, SPEED_MAX)
+                        if ev.state < TRIGGER_DEADZONE:
+                            state.speed = SPEED_STOPPED
+                        else:
+                            state.speed = map_axis(ev.state, TRIGGER_DEADZONE, 255,
+                                                   SPEED_MIN, SPEED_MAX)
 
                 elif ev.ev_type == "Key" and ev.state == 1:
                     if ev.code == BTN_SOUTH:
