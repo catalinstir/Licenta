@@ -15,13 +15,12 @@ Discovery: waits for the first UDP broadcast from the ESP8266, then sends
            commands back to that IP.
 
 Usage:
-  python3 rc_controller.py [--port 4210]
+  python3 rc_controller.py
 
 Dependencies:
   pip install inputs
 """
 
-import argparse
 import socket
 import threading
 import time
@@ -162,18 +161,17 @@ def udp_sender(state: State, sock: socket.socket, esp_addr_ref: list,
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
-    parser = argparse.ArgumentParser(description="Xbox One → ESP8266 UDP → K66F RC bridge")
-    parser.add_argument("--port", type=int, default=4210)
-    args = parser.parse_args()
+UDP_PORT = 4210
 
+
+def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("", args.port))
+    sock.bind(("", UDP_PORT))
     sock.settimeout(1.0)
 
-    print(f"Listening for ESP8266 on UDP port {args.port}...")
+    print(f"Listening for ESP8266 on UDP port {UDP_PORT}...")
     print("Controls: left stick = steer | right trigger = throttle")
     print("          A button = EMERGENCY STOP | B button = toggle RC/auto")
     print("Press Ctrl+C to quit.\n")
