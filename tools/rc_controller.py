@@ -103,7 +103,8 @@ def controller_reader(state: State, done: threading.Event, debug: bool):
             with state.lock:
                 if ev.ev_type == "Absolute":
                     if ev.code == ABS_X:
-                        state.steer = map_axis(ev.state, -32768, 32767, STEER_MIN, STEER_MAX)
+                        raw = map_axis(ev.state, -32768, 32767, STEER_MIN, STEER_MAX)
+                        state.steer = round(raw / 50) * 50
                     elif ev.code == ABS_RZ:
                         if ev.state < TRIGGER_DEADZONE:
                             state.speed = SPEED_STOPPED
