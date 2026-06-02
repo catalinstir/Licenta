@@ -153,19 +153,7 @@ int main(void)
                     break;
                 }
 
-                if (uart_packet_type == PACKET_RC_REVERSE)
-                {
-                    uart_packet_type  = PACKET_NONE;
-                    rc_last_packet_ms = g_systemTime_ms;
-                    /* 480A double-click: brake → neutral → brake again */
-                    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, 630);
-                    delay(2000000);  /* ~150 ms brake hold */
-                    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, 700);
-                    delay(1000000);  /* ~75 ms neutral pause */
-                    Motor_SetPwm(MOTOR_BRUSHED_FTM_BASEADDR, MOTOR_BRUSHED, 630);
-                    PRINTF("-REVERSE\r\n");
-                }
-                else if (rc_packet_ready)
+                if (rc_packet_ready)
                 {
                     rc_packet_ready   = false;
                     uart_packet_type  = PACKET_NONE;

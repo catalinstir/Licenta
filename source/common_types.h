@@ -46,8 +46,7 @@ typedef enum {
     PACKET_STOP,
     PACKET_RC_ENTER,
     PACKET_RC_AUTO,
-    PACKET_RC_CONTROL,
-    PACKET_RC_REVERSE
+    PACKET_RC_CONTROL
 } UARTPacketType;
 
 #endif // COMMON_TYPES_H

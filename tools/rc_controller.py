@@ -45,9 +45,6 @@ SPEED_STOPPED = 700   # duty×100 that parks the ESC (matches Motor_Stop final v
 SPEED_MIN     = 770   # duty×100 at trigger threshold — slowest running speed
 SPEED_MAX     = 790   # duty×100 at full trigger press
 
-REVERSE_SPEED = 630   # duty×100 for reverse (below ESC neutral ~700)
-REVERSE_HOLD_TICKS = 12  # ticks to wait after V\r for firmware sequence (~600 ms at 20 Hz)
-
 TRIGGER_DEADZONE = 10  # raw trigger units (0-255) below which we treat as released
 
 SEND_INTERVAL = 0.05  # 20 Hz — keeps firmware watchdog (500 ms) fed
@@ -70,13 +67,11 @@ def map_axis(raw: int, in_min: int, in_max: int, out_min: int, out_max: int) -> 
 
 class State:
     def __init__(self):
-        self.steer            = STEER_NEUTRAL
-        self.speed            = SPEED_STOPPED
-        self.mode             = "auto"   # "auto" | "rc"
-        self.stop             = False
-        self.reversing        = False
-        self.reverse_requested = False
-        self.lock             = threading.Lock()
+        self.steer = STEER_NEUTRAL
+        self.speed = SPEED_STOPPED
+        self.mode  = "auto"   # "auto" | "rc"
+        self.stop  = False
+        self.lock  = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +79,6 @@ class State:
 # ---------------------------------------------------------------------------
 ABS_X     = "ABS_X"     # left stick horizontal  -32768..32767
 ABS_RZ    = "ABS_RZ"    # right trigger           0..255
-ABS_Z     = "ABS_Z"     # left trigger            0..255
 BTN_SOUTH = "BTN_SOUTH" # A — emergency stop
 BTN_EAST  = "BTN_EAST"  # B — toggle RC / auto
 
@@ -118,14 +112,6 @@ def controller_reader(state: State, done: threading.Event, debug: bool):
                             state.speed = map_axis(ev.state, TRIGGER_DEADZONE, 255,
                                                    SPEED_MIN, SPEED_MAX)
 
-                    elif ev.code == ABS_Z:
-                        if ev.state < TRIGGER_DEADZONE:
-                            state.reversing = False
-                        else:
-                            if not state.reversing:
-                                state.reverse_requested = True
-                                state.reversing = True
-
                 elif ev.ev_type == "Key" and ev.state == 1:
                     if ev.code == BTN_SOUTH:
                         state.stop = True
@@ -138,8 +124,7 @@ def controller_reader(state: State, done: threading.Event, debug: bool):
 def udp_sender(state: State, sock: socket.socket, esp_addr_ref: list,
                done: threading.Event, debug: bool):
     """Sends commands to the ESP8266. esp_addr_ref[0] is set by the receiver thread."""
-    in_rc        = False
-    reverse_hold = 0   # ticks remaining after V\r before sending speed packets
+    in_rc = False
 
     while not done.is_set():
         time.sleep(SEND_INTERVAL)
@@ -149,56 +134,36 @@ def udp_sender(state: State, sock: socket.socket, esp_addr_ref: list,
             continue  # not discovered yet
 
         with state.lock:
-            stop_req      = state.stop
-            mode          = state.mode
-            steer         = state.steer
-            speed         = state.speed
-            reversing     = state.reversing
-            rev_req       = state.reverse_requested
+            stop_req = state.stop
+            mode     = state.mode
+            steer    = state.steer
+            speed    = state.speed
             if stop_req:
                 state.stop = False
-            if rev_req:
-                state.reverse_requested = False
 
         if stop_req:
             sock.sendto(b"S\r", addr)
             print("[TX] S  (emergency stop)")
             in_rc = False
-            reverse_hold = 0
             continue
 
         if mode == "rc" and not in_rc:
             sock.sendto(b"R\r", addr)
             print("[TX] R  (enter RC mode)")
             in_rc = True
-            reverse_hold = 0
             continue
 
         if mode == "auto" and in_rc:
             sock.sendto(b"A\r", addr)
             print("[TX] A  (return to auto)")
             in_rc = False
-            reverse_hold = 0
             continue
 
-        if not in_rc:
-            continue
-
-        if rev_req:
-            sock.sendto(b"V\r", addr)
-            print("[TX] V  (reverse sequence)")
-            reverse_hold = REVERSE_HOLD_TICKS
-            continue
-
-        if reverse_hold > 0:
-            reverse_hold -= 1
-            continue
-
-        effective_speed = REVERSE_SPEED if reversing else speed
-        pkt = f"{steer} {effective_speed}\r"
-        sock.sendto(pkt.encode(), addr)
-        if debug:
-            print(f"[TX] {pkt.strip()}")
+        if in_rc:
+            pkt = f"{steer} {speed}\r"
+            sock.sendto(pkt.encode(), addr)
+            if debug:
+                print(f"[TX] {pkt.strip()}")
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +187,7 @@ def main():
     sock.settimeout(1.0)
 
     print(f"Listening for ESP8266 on UDP port {UDP_PORT}...")
-    print("Controls: left stick = steer | right trigger = throttle | left trigger = reverse")
+    print("Controls: left stick = steer | right trigger = throttle")
     print("          A button = EMERGENCY STOP | B button = toggle RC/auto")
     print("Press Ctrl+C to quit.\n")
 
