@@ -38,8 +38,8 @@ except ImportError:
 # PWM mapping constants — must match firmware config.h
 # ---------------------------------------------------------------------------
 STEER_NEUTRAL = 700
-STEER_MIN     = 900   # swapped: left stick left → steer left
-STEER_MAX     = 500
+STEER_MIN     = 500
+STEER_MAX     = 900
 
 SPEED_STOPPED = 700   # parks the ESC (matches Motor_Stop final value)
 SPEED_MIN     = 770   # slowest running speed
@@ -55,7 +55,7 @@ SEND_INTERVAL = 0.05   # 20 Hz — keeps firmware 500 ms watchdog fed
 # Run with --debug and move each input to confirm these match your setup.
 # ---------------------------------------------------------------------------
 AXIS_STEER    = 0   # left stick X      (-1.0 = full left,  +1.0 = full right)
-AXIS_THROTTLE = 5   # right trigger     (-1.0 = rest,       +1.0 = full press)
+AXIS_THROTTLE = 4   # right trigger     (-1.0 = rest,       +1.0 = full press)
 BTN_STOP      = 0   # A — emergency stop
 BTN_RC_TOGGLE = 1   # B — toggle RC / auto
 
@@ -141,7 +141,7 @@ def controller_reader(state: State, done: threading.Event, debug: bool):
                     print(f"[CTL] axis={ev.axis} value={ev.value:.3f}")
                 with state.lock:
                     if ev.axis == AXIS_STEER:
-                        raw = axis_to_pwm(ev.value, STICK_DEADZONE,
+                        raw = axis_to_pwm(-ev.value, STICK_DEADZONE,
                                           STEER_MIN, STEER_MAX, STEER_NEUTRAL)
                         state.steer = round(raw / 50) * 50   # snap to 50-unit steps
 
