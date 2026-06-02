@@ -15,16 +15,18 @@ Discovery: waits for the first UDP broadcast from the ESP8266, then sends
            commands back to that IP.
 
 Usage:
-  python3 rc_controller.py
+  python3 rc_controller.py           # normal
+  python3 rc_controller.py --debug   # prints every controller event and TX packet
 
 Dependencies:
   pip install inputs
 """
 
+import argparse
 import socket
+import sys
 import threading
 import time
-import sys
 
 try:
     import inputs
@@ -83,7 +85,7 @@ BTN_SOUTH = "BTN_SOUTH" # A — emergency stop
 BTN_EAST  = "BTN_EAST"  # B — toggle RC / auto
 
 
-def controller_reader(state: State, done: threading.Event):
+def controller_reader(state: State, done: threading.Event, debug: bool):
     print("Waiting for gamepad...")
     while not done.is_set():
         try:
@@ -97,6 +99,9 @@ def controller_reader(state: State, done: threading.Event):
             continue
 
         for ev in events:
+            if debug and ev.ev_type != "Sync":
+                print(f"[CTL] type={ev.ev_type} code={ev.code} state={ev.state}")
+
             with state.lock:
                 if ev.ev_type == "Absolute":
                     if ev.code == ABS_X:
@@ -110,11 +115,13 @@ def controller_reader(state: State, done: threading.Event):
                     if ev.code == BTN_SOUTH:
                         state.stop = True
                     elif ev.code == BTN_EAST:
-                        state.mode = "rc" if state.mode == "auto" else "auto"
+                        new_mode = "rc" if state.mode == "auto" else "auto"
+                        print(f"[CTL] mode → {new_mode}")
+                        state.mode = new_mode
 
 
 def udp_sender(state: State, sock: socket.socket, esp_addr_ref: list,
-               done: threading.Event):
+               done: threading.Event, debug: bool):
     """Sends commands to the ESP8266. esp_addr_ref[0] is set by the receiver thread."""
     in_rc = False
 
@@ -152,9 +159,10 @@ def udp_sender(state: State, sock: socket.socket, esp_addr_ref: list,
             continue
 
         if in_rc:
-            sock.sendto(f"{steer} {speed}\r".encode(), addr)
-            # Uncomment for verbose logging:
-            # print(f"[TX] steer={steer} speed={speed}")
+            pkt = f"{steer} {speed}\r"
+            sock.sendto(pkt.encode(), addr)
+            if debug:
+                print(f"[TX] {pkt.strip()}")
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +173,12 @@ UDP_PORT = 4210
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Xbox One → ESP8266 UDP → K66F RC bridge")
+    parser.add_argument("--debug", action="store_true",
+                        help="print every controller event and TX packet")
+    args = parser.parse_args()
+    debug = args.debug
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -180,8 +194,8 @@ def main():
     done         = threading.Event()
     esp_addr_ref = [None]  # mutable container so threads can share the discovered IP
 
-    reader = threading.Thread(target=controller_reader, args=(state, done), daemon=True)
-    sender = threading.Thread(target=udp_sender, args=(state, sock, esp_addr_ref, done),
+    reader = threading.Thread(target=controller_reader, args=(state, done, debug), daemon=True)
+    sender = threading.Thread(target=udp_sender, args=(state, sock, esp_addr_ref, done, debug),
                                daemon=True)
 
     reader.start()
