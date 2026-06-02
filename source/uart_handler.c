@@ -30,6 +30,10 @@ void UART4_UserIRQHandler(void)
         {
             uart_packet_type = PACKET_RC_AUTO;
         }
+        else if (rxIndex == 1 && rxBuffer[0] == 'V')
+        {
+            uart_packet_type = PACKET_RC_REVERSE;
+        }
         else
         {
             /* Try to parse as "<steer> <speed>" RC control packet */
