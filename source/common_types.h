@@ -37,7 +37,16 @@ typedef enum {
     STATE_READ_CAMERA,
     STATE_PROCESS_VECTOR,
     STATE_CONTROL,
-    STATE_STOP
+    STATE_STOP,
+    STATE_REMOTE_CONTROL
 } SystemState;
+
+typedef enum {
+    PACKET_NONE,
+    PACKET_STOP,
+    PACKET_RC_ENTER,
+    PACKET_RC_AUTO,
+    PACKET_RC_CONTROL
+} UARTPacketType;
 
 #endif // COMMON_TYPES_H
