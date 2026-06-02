@@ -60,11 +60,6 @@ def map_axis(raw: int, in_min: int, in_max: int, out_min: int, out_max: int) -> 
     return round(out_min + ratio * (out_max - out_min))
 
 
-def snap_steer(value: int) -> int:
-    """Round to the nearest discrete PWM step the firmware accepts."""
-    steps = [500, 600, 700, 800, 900]
-    return min(steps, key=lambda s: abs(s - value))
-
 
 # ---------------------------------------------------------------------------
 # Shared state between controller-reader and serial-sender threads
@@ -108,9 +103,7 @@ def controller_reader(state: State, done: threading.Event, debug: bool):
             with state.lock:
                 if ev.ev_type == "Absolute":
                     if ev.code == ABS_X:
-                        state.steer = snap_steer(
-                            map_axis(ev.state, -32768, 32767, STEER_MIN, STEER_MAX)
-                        )
+                        state.steer = map_axis(ev.state, -32768, 32767, STEER_MIN, STEER_MAX)
                     elif ev.code == ABS_RZ:
                         if ev.state < TRIGGER_DEADZONE:
                             state.speed = SPEED_STOPPED
