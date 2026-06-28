@@ -1,38 +1,25 @@
 #include "control_algorithms.h"
+
 #include "fsl_debug_console.h"
+#include "hall_sensor.h"
 #include "utils.h"
 
 // PID
-uint16_t MapControlToDutyCycle(float control) {
-
+uint16_t MapControlToDutyCycle(float control)
+{
     float pwm_value = PWM_MIN + (control + 1.0f) * (PWM_MAX - PWM_MIN) / 2.0f;
-
     if (pwm_value < PWM_MIN)
         pwm_value = PWM_MIN;
     if (pwm_value > PWM_MAX)
         pwm_value = PWM_MAX;
-
-    const uint16_t discrete_pwm[] = {500, 600, 700, 800, 900};
-    const int num_values = sizeof(discrete_pwm) / sizeof(discrete_pwm[0]);
-
-    uint16_t closest = discrete_pwm[0];
-    float min_diff = fabsf(pwm_value * 100.0f - (float)discrete_pwm[0]);
-
-    for (int i = 1; i < num_values; i++) {
-        float diff = fabsf(pwm_value * 100.0f - (float)discrete_pwm[i]);
-        if (diff < min_diff) {
-            min_diff = diff;
-            closest = discrete_pwm[i];
-        }
-    }
-
-    return closest;
+    return (uint16_t)(pwm_value * 100.0f);
 }
-float CalculateError(float x_center) {
-
+float CalculateError(float x_center)
+{
     return CENTER_X - x_center;
 }
-float CalculateCombinedError(float x_center1, float x_center2) {
+float CalculateCombinedError(float x_center1, float x_center2)
+{
     float error1 = CalculateError(x_center1);
     float error2 = CalculateError(x_center2);
 
@@ -41,7 +28,8 @@ float CalculateCombinedError(float x_center1, float x_center2) {
 }
 
 void CalculateLaneCenter2(VectorType v1, VectorType v2, float *x_1, float *x_2, float *y_1,
-                          float *y_2) {
+                          float *y_2)
+{
     int v1_jos_x = (v1.m_y0 > v1.m_y1) ? v1.m_x0 : v1.m_x1;
     int v1_jos_y = (v1.m_y0 > v1.m_y1) ? v1.m_y0 : v1.m_y1;
     int v2_jos_x = (v2.m_y0 > v2.m_y1) ? v2.m_x0 : v2.m_x1;
@@ -57,14 +45,16 @@ void CalculateLaneCenter2(VectorType v1, VectorType v2, float *x_1, float *x_2, 
     *x_2 = ((float)v1_sus_x + (float)v2_sus_x) / 2.0f;
     *y_2 = ((float)v1_sus_y + (float)v2_sus_y) / 2.0f;
 }
-void CalculateLaneCenter(VectorType v1, VectorType v2, float *x_center, float *y_center) {
+void CalculateLaneCenter(VectorType v1, VectorType v2, float *x_center, float *y_center)
+{
     // Media coordonatelor x și y dintre v1 și v2
     *x_center = ((float)v1.m_x0 + (float)v1.m_x1 + (float)v2.m_x0 + (float)v2.m_x1) / 4.0f;
     *y_center = ((float)v1.m_y0 + (float)v1.m_y1 + (float)v2.m_y0 + (float)v2.m_y1) / 4.0f;
 }
 
 // PID
-float PID_Control(PIDController *pid, float error) {
+float PID_Control(PIDController *pid, float error)
+{
     pid->integral += error;
 
     if (pid->integral > pid->max_integral)
@@ -72,7 +62,7 @@ float PID_Control(PIDController *pid, float error) {
     if (pid->integral < -pid->max_integral)
         pid->integral = -pid->max_integral;
 
-    float derivative = error - pid->previous_error;
+    float derivative    = error - pid->previous_error;
     pid->previous_error = error;
 
     float control = pid->Kp * error + pid->Ki * pid->integral + pid->Kd * derivative;
@@ -84,51 +74,65 @@ float PID_Control(PIDController *pid, float error) {
     return control;
 }
 
-MotorCommand_t ProcessVectorsPID(VectorType v1, VectorType v2) {
-
+MotorCommand_t ProcessVectorsPID(VectorType v1, VectorType v2)
+{
     float x_center, y_center;
     CalculateLaneCenter(v1, v2, &x_center, &y_center);
     float error = CalculateError(x_center);
 
-    float control_steer    = PID_Control(&pid_steering, error);
-    uint16_t steer_duty    = MapControlToDutyCycle(control_steer);
-    uint16_t speed_duty    = CalculateSpeedFromDuty(steer_duty);
+    float control_steer = PID_Control(&pid_steering, error);
+    uint16_t steer_duty = MapControlToDutyCycle(control_steer);
+    uint16_t speed_duty = CalculateSpeedFromDuty(steer_duty);
 
-    if (simulator) {
+    if (simulator)
+    {
+        float rpm = HallSensor_GetRPM();
+        float mps = HallSensor_GetSpeed_kmh() / 3.6f;
         PRINTF("-ERR:");
         print_float(error);
         PRINTF(" CONTROL:");
         print_float(control_steer);
-        PRINTF(" STEER:%d SPEED:%d\r\n", steer_duty, speed_duty);
+        PRINTF(" STEER:%d SPEED:%d RPM:", steer_duty, speed_duty);
+        print_float(rpm);
+        PRINTF(" MPS:");
+        print_float(mps);
+        PRINTF("\r\n");
+    }
+    else
+    {
+        float rpm = HallSensor_GetRPM();
+        float mps = HallSensor_GetSpeed_kmh() / 3.6f;
+        PRINTF("-STEER:%d SPEED:%d RPM:", steer_duty, speed_duty);
+        print_float(rpm);
+        PRINTF(" MPS:");
+        print_float(mps);
+        PRINTF("\r\n");
     }
 
-    return (MotorCommand_t){ .steer_duty = steer_duty, .speed_duty = speed_duty };
+    return (MotorCommand_t){.steer_duty = steer_duty, .speed_duty = speed_duty};
 }
 
-uint16_t CalculateSpeedFromDuty(uint16_t duty_cycle) {
-    //      int deviation = abs((int)duty_cycle - 700);
-    //      float scale = 1.0f - ((float)deviation / 300.0f);
-    //
-    //      float pwm_speed = PWM_MIN_SPEED + scale * (PWM_MAX_SPEED - PWM_MIN_SPEED);
+uint16_t CalculateSpeedFromDuty(uint16_t duty_cycle)
+{
+    int deviation = abs((int)duty_cycle - 700);
+    float scale   = 1.0f - ((float)deviation / 150.0f);
+    if (scale < 0.0f)
+        scale = 0.0f;
 
-    float pwm_speed;
-    if (duty_cycle == 700) {
-        pwm_speed = PWM_MAX_SPEED;
-
-    } else
-        pwm_speed = PWM_MIN_SPEED;
+    float pwm_speed = PWM_MIN_SPEED + scale * (PWM_MAX_SPEED - PWM_MIN_SPEED);
 
     return (uint16_t)(pwm_speed * 100);
 }
 
-uint16_t CalculateSpeedFromControl(float control) {
+uint16_t CalculateSpeedFromControl(float control)
+{
     if (control < -1.0f)
         control = -1.0f;
     if (control > 1.0f)
         control = 1.0f;
 
     float deviation = fabsf(control);
-    float scale = 1.0f - deviation;
+    float scale     = 1.0f - deviation;
 
     float pwm_speed = PWM_MIN_SPEED + scale * (PWM_MAX_SPEED - PWM_MIN_SPEED);
 
@@ -149,30 +153,46 @@ uint16_t CalculateSpeedFromControl(float control) {
  * States: [e_lat (m), theta_e (rad), psi_dot (rad/s)]
  */
 /* ---- paste lqr_tuning.py output here ---------------------------------- */
-static const float LQR_K[LQR_NUM_STATES] = {
-    1.50000000f,  /* k_e_lat   [rad/m]       — PLACEHOLDER, run lqr_tuning.py */
-    1.20000000f,  /* k_theta_e [rad/rad]     — PLACEHOLDER, run lqr_tuning.py */
-    0.08000000f   /* k_psi_dot [rad/(rad/s)] — PLACEHOLDER, run lqr_tuning.py */
+static float LQR_K[LQR_NUM_STATES] = {
+    0.41000000f, /* k_e_lat   [rad/m]       DARE×1.23 L=0.25m v0=1.61m/s dt=0.558s */
+    0.71000000f, /* k_theta_e [rad/rad]     DARE×1.00 */
+    0.35000000f  /* k_psi_dot [rad/(rad/s)] DARE×0.83 */
 };
 /* ----------------------------------------------------------------------- */
 
+void LQR_SetGains(float k_e_lat, float k_theta_e, float k_psi_dot)
+{
+    LQR_K[0] = k_e_lat;
+    LQR_K[1] = k_theta_e;
+    LQR_K[2] = k_psi_dot;
+}
+
+void LQR_GetGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot)
+{
+    *k_e_lat   = LQR_K[0];
+    *k_theta_e = LQR_K[1];
+    *k_psi_dot = LQR_K[2];
+}
+
 float CalculateLaneHeading(VectorType v1, VectorType v2)
 {
-    float angle_sum  = 0.0f;
-    int   valid_count = 0;
+    float angle_sum = 0.0f;
+    int valid_count = 0;
 
     /* v1 and v2 arrive already normalised (y0 >= y1) from PreprocessVectors.
      * atan2(dx, dy) with dy = y0 - y1 >= 0 gives the signed lane angle:
      *   0          straight
      *   positive   lane leans right  (right curve ahead)
      *   negative   lane leans left   (left curve ahead) */
-    if (v1.m_index != 255u) {
+    if (v1.m_index != 255u)
+    {
         float dx = (float)v1.m_x1 - (float)v1.m_x0;
-        float dy = (float)v1.m_y0 - (float)v1.m_y1;   /* >= 0 after normalise */
+        float dy = (float)v1.m_y0 - (float)v1.m_y1; /* >= 0 after normalise */
         angle_sum += atan2f(dx, dy + 0.01f);
         valid_count++;
     }
-    if (v2.m_index != 255u) {
+    if (v2.m_index != 255u)
+    {
         float dx = (float)v2.m_x1 - (float)v2.m_x0;
         float dy = (float)v2.m_y0 - (float)v2.m_y1;
         angle_sum += atan2f(dx, dy + 0.01f);
@@ -193,14 +213,23 @@ void LQRState_Update(LQRState_t *state, VectorType v1, VectorType v2)
 
     float theta_new = CalculateLaneHeading(v1, v2);
 
-    if (!state->initialized) {
+    if (!state->initialized)
+    {
         /* First call: seed prev_theta_e so the finite difference starts at 0,
          * not at (theta_new - 0) which would produce a spurious yaw-rate spike. */
         state->prev_theta_e = theta_new;
         state->psi_dot      = 0.0f;
         state->initialized  = true;
-    } else {
+    }
+    else
+    {
         state->psi_dot = (theta_new - state->prev_theta_e) / LQR_DT;
+        /* Clamp to physically reachable yaw rate (v*tan(δ_max)/L ≈ 3.7 rad/s at 1.61 m/s).
+         * Spikes beyond this are misclassified/noisy vectors, not real dynamics. */
+        if (state->psi_dot > 3.0f)
+            state->psi_dot = 3.0f;
+        if (state->psi_dot < -3.0f)
+            state->psi_dot = -3.0f;
     }
 
     state->theta_e      = theta_new;
@@ -210,16 +239,16 @@ void LQRState_Update(LQRState_t *state, VectorType v1, VectorType v2)
 uint16_t LQR_SteerControl(const LQRState_t *state)
 {
     /* u = -K * x */
-    float delta = -(LQR_K[0] * state->e_lat   +
-                    LQR_K[1] * state->theta_e  +
-                    LQR_K[2] * state->psi_dot);
+    float delta =
+        -(LQR_K[0] * state->e_lat + LQR_K[1] * state->theta_e + LQR_K[2] * state->psi_dot);
 
-    /* SIGN_NOTE: if the car steers in the wrong direction on first test,
-     * negate delta here: delta = -delta; */
+    delta = -delta;
 
     /* Clamp to physical servo limit */
-    if (delta >  LQR_MAX_STEER) delta =  LQR_MAX_STEER;
-    if (delta < -LQR_MAX_STEER) delta = -LQR_MAX_STEER;
+    if (delta > LQR_MAX_STEER)
+        delta = LQR_MAX_STEER;
+    if (delta < -LQR_MAX_STEER)
+        delta = -LQR_MAX_STEER;
 
     /* Map steering angle to normalised control [-1, 1] then to PWM.
      * Positive delta (steer left) → negative normalised control → smaller PWM.
@@ -233,9 +262,7 @@ uint16_t LQR_SteerControl(const LQRState_t *state)
  * PI speed control
  * ========================================================================= */
 
-void PIController_Init(PIController_t *pi,
-                        float kp, float ki,
-                        float out_min, float out_max)
+void PIController_Init(PIController_t *pi, float kp, float ki, float out_min, float out_max)
 {
     pi->Kp           = kp;
     pi->Ki           = ki;
@@ -245,22 +272,25 @@ void PIController_Init(PIController_t *pi,
     pi->output_max   = out_max;
 }
 
-uint16_t PI_SpeedControl(PIController_t *pi,
-                          float target_rpm, float current_rpm)
+uint16_t PI_SpeedControl(PIController_t *pi, float target_rpm, float current_rpm)
 {
     float error = target_rpm - current_rpm;
 
     pi->integral += error * LQR_DT;
 
     /* Anti-windup: clamp integral */
-    if (pi->integral >  pi->integral_max) pi->integral =  pi->integral_max;
-    if (pi->integral < -pi->integral_max) pi->integral = -pi->integral_max;
+    if (pi->integral > pi->integral_max)
+        pi->integral = pi->integral_max;
+    if (pi->integral < -pi->integral_max)
+        pi->integral = -pi->integral_max;
 
     float output = pi->Kp * error + pi->Ki * pi->integral;
 
     /* Clamp output to allowed PWM range */
-    if (output > pi->output_max) output = pi->output_max;
-    if (output < pi->output_min) output = pi->output_min;
+    if (output > pi->output_max)
+        output = pi->output_max;
+    if (output < pi->output_min)
+        output = pi->output_min;
 
     return (uint16_t)output;
 }
@@ -274,18 +304,20 @@ uint16_t PI_SpeedControl(PIController_t *pi,
  * Reduction is linear between neutral and full deflection.
  * ========================================================================= */
 
-#define SPEED_STEER_COUPLING  0.5f   /* slope: fraction of speed lost per    */
-                                      /* unit of normalised steer deflection  */
-#define SPEED_STEER_MIN_SCALE 0.4f   /* floor: never go below 40 % of target */
+#define SPEED_STEER_COUPLING 0.5f  /* slope: fraction of speed lost per    */
+                                   /* unit of normalised steer deflection  */
+#define SPEED_STEER_MIN_SCALE 0.4f /* floor: never go below 40 % of target */
 
 float SpeedSteeringCoupling(float target_rpm, uint16_t steer_duty)
 {
     /* Normalise deviation from neutral to [0, 1] */
     float deviation = fabsf((float)steer_duty - 700.0f) / 200.0f;
-    if (deviation > 1.0f) deviation = 1.0f;
+    if (deviation > 1.0f)
+        deviation = 1.0f;
 
     float scale = 1.0f - SPEED_STEER_COUPLING * deviation;
-    if (scale < SPEED_STEER_MIN_SCALE) scale = SPEED_STEER_MIN_SCALE;
+    if (scale < SPEED_STEER_MIN_SCALE)
+        scale = SPEED_STEER_MIN_SCALE;
 
     return target_rpm * scale;
 }

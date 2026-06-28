@@ -1,8 +1,12 @@
 #include "uart_handler.h"
+#include "control_algorithms.h"
+#include "hall_sensor.h"
 
 #define RX_BUFFER_SIZE 32
 static volatile char rxBuffer[RX_BUFFER_SIZE];
 static volatile uint8_t rxIndex = 0;
+
+volatile bool lqr_gains_updated = false;
 
 void UART4_UserIRQHandler(void)
 {
@@ -23,12 +27,30 @@ void UART4_UserIRQHandler(void)
         }
         else if (rxIndex == 1 && rxBuffer[0] == 'R')
         {
+            stop               = 0;
             rc_enter_requested = true;
             uart_packet_type   = PACKET_RC_ENTER;
         }
         else if (rxIndex == 1 && rxBuffer[0] == 'A')
         {
             uart_packet_type = PACKET_RC_AUTO;
+        }
+        else if (rxIndex >= 3 && rxBuffer[0] == 'H' && rxBuffer[1] == ':')
+        {
+            /* Hall RPM packet from ESP8266: "H:<rpm>" */
+            int rpm_int;
+            if (sscanf((const char *)&rxBuffer[2], "%d", &rpm_int) == 1)
+                HallSensor_SetExternalRPM((float)rpm_int);
+        }
+        else if (rxIndex >= 5 && rxBuffer[0] == 'G' && rxBuffer[1] == ':')
+        {
+            /* LQR gain packet from rc_controller: "G:<ke_x1000> <kt_x1000> <kp_x1000>" */
+            int ke_i, kt_i, kp_i;
+            if (sscanf((const char *)&rxBuffer[2], "%d %d %d", &ke_i, &kt_i, &kp_i) == 3)
+            {
+                LQR_SetGains(ke_i / 1000.0f, kt_i / 1000.0f, kp_i / 1000.0f);
+                lqr_gains_updated = true;
+            }
         }
         else
         {
@@ -45,6 +67,10 @@ void UART4_UserIRQHandler(void)
         }
 
         rxIndex = 0;
+    }
+    else if (c == '\n')
+    {
+        /* ignore — ESP8266 may append LF after CR */
     }
     else if (rxIndex < (RX_BUFFER_SIZE - 1))
     {

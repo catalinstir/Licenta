@@ -50,7 +50,7 @@ import scipy.linalg
 # ---------------------------------------------------------------------------
 # Vehicle constants
 # ---------------------------------------------------------------------------
-L         = 0.20          # wheelbase [m]  — RC car scale
+L         = 0.25          # wheelbase [m]  — measured axle-to-axle
 MAX_STEER = np.deg2rad(30.0)  # physical servo limit [rad]
 
 

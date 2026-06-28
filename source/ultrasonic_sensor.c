@@ -7,12 +7,18 @@ unsigned int Switch_Status(void) {
         return 1;
 }
 
+static uint16_t s_last_distance_cm = 999;
+
+uint16_t USonic_GetLastDistance(void)
+{
+    return s_last_distance_cm;
+}
+
 unsigned int USonic_GetDistance(void) {
     unsigned int t;
     unsigned int echo;
     unsigned int timeout = 0;
     const unsigned int MAX_TIMEOUT = 100000;
-    PRINTF("CITESTE DISTANTA\r\n");
     GPIO_PortToggle(BOARD_TRIG_GPIO, 1u << BOARD_TRIG_GPIO_PIN);
 
     delay(170);
@@ -46,6 +52,6 @@ unsigned int USonic_GetDistance(void) {
 
 bool verificaObstacol(void) {
     unsigned int d = USonic_GetDistance();
-    PRINTF("\r\ndistance=%d \r\n", d);
+    s_last_distance_cm = (uint16_t)d;
     return (d < 30);
 }

@@ -38,7 +38,8 @@ typedef enum {
     STATE_PROCESS_VECTOR,
     STATE_CONTROL,
     STATE_STOP,
-    STATE_REMOTE_CONTROL
+    STATE_REMOTE_CONTROL,
+    STATE_INTERSECTION
 } SystemState;
 
 typedef enum {
