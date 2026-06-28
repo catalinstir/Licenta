@@ -44,6 +44,11 @@ int main(void)
     InitGlobals();
     Init_Peripherals();
 
+    static uint16_t  last_steer = 700;
+    static uint16_t  last_speed = 770;
+    static uint32_t  intersection_entry_ms = 0;
+    static LQRState_t lqr_state = {0};
+
     while (1)
     {
         switch (currentState)
@@ -51,12 +56,39 @@ int main(void)
             case STATE_WAIT:
                 if (check_obstacle)
                 {
-                    if (!simulator && verificaObstacol())
-                    {
-                        stop = 1;
-                    }
                     check_obstacle = false;
+                    if (verificaObstacol())
+                        stop = 1;
                 }
+
+                if (g_systemTime_ms - lastRpmPrint >= 200)
+                {
+                    lastRpmPrint    = g_systemTime_ms;
+                    float rpm       = HallSensor_GetRPM();
+                    float speed_kmh = HallSensor_GetSpeed_kmh();
+                    int rpm_int     = (int)rpm;
+                    int rpm_dec     = (int)((rpm - rpm_int) * 10);
+                    int kmh_int     = (int)speed_kmh;
+                    int kmh_dec     = (int)((speed_kmh - kmh_int) * 10);
+                    PRINTF("distance:%u steer:%u motor_speed:%u rpm:%d.%d speed:%d.%d vectors:%u\r\n",
+                        USonic_GetLastDistance(), last_steer, last_speed, rpm_int, rpm_dec, kmh_int,
+                        kmh_dec, (unsigned)count);
+                }
+
+                if (lqr_gains_updated)
+                {
+                    lqr_gains_updated = false;
+                    float ke, kt, kp;
+                    LQR_GetGains(&ke, &kt, &kp);
+                    PRINTF("GAINS:");
+                    print_float(ke);
+                    PRINTF(" ");
+                    print_float(kt);
+                    PRINTF(" ");
+                    print_float(kp);
+                    PRINTF("\r\n");
+                }
+
                 if (stop)
                 {
                     currentState = STATE_STOP;
@@ -90,11 +122,22 @@ int main(void)
                 {
                     if (Pixy_GetVectors(vectori, &count) == E_OK)
                     {
-                        currentState = STATE_PROCESS_VECTOR;
+                        if (g_pixy_intersection_detected)
+                        {
+                            PRINTF("-INTERSECTION\r\n");
+                            intersection_entry_ms = g_systemTime_ms;
+                            currentState = STATE_INTERSECTION;
+                        }
+                        else
+                        {
+                            currentState = STATE_PROCESS_VECTOR;
+                        }
                     }
                     else
                     {
-                        currentState = STATE_WAIT;
+                        PRINTF("-INTERSECTION (0 vectors)\r\n");
+                        intersection_entry_ms = g_systemTime_ms;
+                        currentState = STATE_INTERSECTION;
                     }
                 }
                 break;
@@ -102,11 +145,9 @@ int main(void)
             case STATE_PROCESS_VECTOR:
                 if (!PreprocessVectors(vectori, count, &Vector1, &Vector2))
                 {
-                    stop = 1;
-                }
-                if (stop)
-                {
-                    currentState = STATE_STOP;
+                    PRINTF("-INTERSECTION (bad vectors)\r\n");
+                    intersection_entry_ms = g_systemTime_ms;
+                    currentState = STATE_INTERSECTION;
                 }
                 else
                 {
@@ -116,23 +157,17 @@ int main(void)
 
             case STATE_CONTROL:
             {
-                MotorCommand_t cmd = ProcessVectorsPID(Vector1, Vector2);
-                Motor_ApplyCommand(cmd.steer_duty, cmd.speed_duty);
-
-                if (g_systemTime_ms - lastRpmPrint >= 200)
-                {
-                    lastRpmPrint      = g_systemTime_ms;
-                    float rpm         = HallSensor_GetRPM();
-                    float speed_kmh   = HallSensor_GetSpeed_kmh();
-                    int rpm_int       = (int)rpm;
-                    int rpm_dec       = (int)((rpm - rpm_int) * 10);
-                    int kmh_int       = (int)speed_kmh;
-                    int kmh_dec       = (int)((speed_kmh - kmh_int) * 10);
-                    PRINTF("-RPM:%d.%d SPD:%d.%d km/h PULSES:%u RUNNING:%d\r\n",
-                           rpm_int, rpm_dec, kmh_int, kmh_dec,
-                           HallSensor_GetPulseCount(), HallSensor_IsRunning());
-                }
-
+                LQRState_Update(&lqr_state, Vector1, Vector2);
+                uint16_t steer_duty = LQR_SteerControl(&lqr_state);
+                uint16_t speed_duty = CalculateSpeedFromDuty(steer_duty);
+                PRINTF("-STEER:%d SPEED:%d e_lat:", steer_duty, speed_duty);
+                print_float(lqr_state.e_lat);
+                PRINTF(" theta_e:");
+                print_float(lqr_state.theta_e);
+                PRINTF("\r\n");
+                Motor_ApplyCommand(steer_duty, speed_duty);
+                last_steer   = steer_duty;
+                last_speed   = speed_duty;
                 currentState = STATE_WAIT;
                 break;
             }
@@ -159,6 +194,8 @@ int main(void)
                     uart_packet_type  = PACKET_NONE;
                     rc_last_packet_ms = g_systemTime_ms;
                     Motor_ApplyCommand(rc_steer_cmd, rc_speed_cmd);
+                    last_steer = rc_steer_cmd;
+                    last_speed = rc_speed_cmd;
                 }
                 else if (g_systemTime_ms - rc_last_packet_ms > 500U)
                 {
@@ -174,6 +211,24 @@ int main(void)
                 Motor_Stop();
                 currentState = STATE_WAIT;
                 break;
+
+            case STATE_INTERSECTION:
+            {
+                if (stop)
+                {
+                    currentState = STATE_STOP;
+                    break;
+                }
+                if (g_systemTime_ms - intersection_entry_ms >= INTERSECTION_TIMEOUT_MS)
+                {
+                    PRINTF("-INTERSECTION done\r\n");
+                    lqr_state.initialized = false;
+                    currentState = STATE_WAIT;
+                    break;
+                }
+                Motor_ApplyCommand(700, last_speed);
+                break;
+            }
 
             default:
                 currentState = STATE_WAIT;
@@ -203,9 +258,8 @@ void Init_Peripherals(void)
     Pixy_Init();
     ADC_Init();
 
-    // HallSensor_Init();
-    // HallSensor_SetWheelCircumference(0.201f);
-
+    HallSensor_Init();
+    HallSensor_SetWheelCircumference(0.220f);
 
     float batteryVoltage = ADC_ReadBatteryVoltage();
 

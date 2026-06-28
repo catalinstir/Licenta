@@ -2,6 +2,7 @@
 
 uint8_t g_master_rx_buff[I2C_DATA_LENGTH];
 uint8_t g_master_tx_buff[I2C_DATA_LENGTH];
+bool    g_pixy_intersection_detected = false;
 
 void Pixy_Init(void) {
     i2c_master_config_t masterConfig;
@@ -24,6 +25,7 @@ void Pixy_Init(void) {
 
 ReturnType Pixy_GetVectors(VectorType *pVectors, uint8_t *pVectorCount) {
     ReturnType retValue = E_NOT_OK;
+    g_pixy_intersection_detected = false;
     i2c_master_transfer_t masterXfer;
     uint8_t deviceAddress = 0x01U;
 
@@ -80,6 +82,9 @@ ReturnType Pixy_GetVectors(VectorType *pVectors, uint8_t *pVectorCount) {
                 pVectors[currentVector].m_flags = ptr[o + 5];
                 currentVector++;
             }
+        }
+        else if (featureType == 2) {
+            g_pixy_intersection_detected = true;
         }
 
         index += 2 + featureLen;

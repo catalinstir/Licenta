@@ -11,6 +11,7 @@
 
 unsigned int Switch_Status(void);
 unsigned int USonic_GetDistance(void);
+uint16_t USonic_GetLastDistance(void);
 
 /* Returns true if an obstacle closer than 30 cm is detected. */
 bool verificaObstacol(void);

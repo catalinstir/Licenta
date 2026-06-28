@@ -56,11 +56,7 @@ uint16_t CalculateSpeedFromControl(float control);
  * ========================================================================= */
 
 #define LQR_NUM_STATES    3          /* number of state variables             */
-#define LQR_DT            0.05f     /* control timestep [s] — MUST match the */
-                                     /* actual measured loop period.          */
-                                     /* With current DELAY_* constants the    */
-                                     /* loop is ~375 ms; run lqr_tuning.py    */
-                                     /* with --dt 0.375 until delays change.  */
+#define LQR_DT            0.558f    /* control timestep [s] — measured loop period */
 #define LQR_PIX2M         0.006f    /* pixel → metres scale factor            */
                                      /* calibrate: measure track width in m   */
                                      /* divide by its width in pixels          */
@@ -109,6 +105,11 @@ void     LQRState_Update(LQRState_t *state, VectorType v1, VectorType v2);
  * @return       Steering PWM duty × 100 (e.g. 700 = 7.00 % = neutral)
  */
 uint16_t LQR_SteerControl(const LQRState_t *state);
+
+/** Update the LQR gain vector at runtime (values in natural units, not ×1000). */
+void LQR_SetGains(float k_e_lat, float k_theta_e, float k_psi_dot);
+/** Read the current LQR gain vector. */
+void LQR_GetGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot);
 
 /* =========================================================================
  * PI speed control

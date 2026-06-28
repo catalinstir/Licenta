@@ -11,4 +11,6 @@ void UART4_UserIRQHandler(void);
 bool Simulator_GetFrame(VectorType *vectori, uint8_t *count);
 void ParseUARTMessage(char *message, VectorType *v1, VectorType *v2);
 
+extern volatile bool lqr_gains_updated;
+
 #endif // UART_HANDLER_H

@@ -194,20 +194,6 @@ void BOARD_InitPins(void)
                        * configured as a digital output. */
                       | PORT_PCR_ODE(kPORT_OpenDrainEnable));
 
-    // Hall
-    /* PORTC3 (pin B10) is configured as FTM0_CH2 for Hall Sensor input capture */
-    PORT_SetPinMux(PORTC, 3U, kPORT_MuxAlt4);
-
-    /* Configure with pull-up for open-drain hall sensors */
-    PORTC->PCR[3] = ((PORTC->PCR[3] &
-                      (~(PORT_PCR_PS_MASK | PORT_PCR_PE_MASK | PORT_PCR_ISF_MASK)))
-
-                     /* Pull Select: Internal pullup resistor is enabled */
-                     | PORT_PCR_PS(kPORT_PullUp)
-
-                     /* Pull Enable: Internal pull resistor is enabled */
-                     | PORT_PCR_PE(1U));
-
 }
 /***********************************************************************************************************************
  * EOF
