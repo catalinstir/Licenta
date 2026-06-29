@@ -45,6 +45,14 @@ void HallSensor_SetExternalRPM(float rpm)
         return;
     }
 
+    /* Normalize to expected range [100, 500] RPM.
+     * ESP8266 occasionally measures 10x too high (WiFi blocking causes a
+     * very short captured interval). Scale in whichever direction brings
+     * the reading into range; leave it alone if already there. */
+    if      (rpm * 10.0f >= 100.0f && rpm * 10.0f <= 500.0f) rpm *= 10.0f;
+    else if (rpm / 10.0f >= 100.0f && rpm / 10.0f <= 500.0f) rpm /= 10.0f;
+    else return; /* unrecoverable — outside range in both directions */
+
     /* Plausibility filter: compare against last_valid_rpm so a spurious H:0
      * (or timeout) can't reset the baseline and let a bad reading slip through. */
     if (g_hallSensor.last_valid_rpm > 0.0f)

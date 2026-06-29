@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-rc_controller_bt.py — Xbox One controller (Bluetooth) → ESP8266 UDP → K66F
+rc_controller_usb.py — Xbox One controller (USB) → ESP8266 UDP → K66F
 
 Communication chain:
   Laptop ←─ UDP broadcast port 4210 ─→ ESP8266 ←─ UART 153600 ─→ K66F
@@ -10,11 +10,12 @@ Protocol:
   R\r                                     enter RC mode
   A\r                                     return to autonomous
   <steer> <speed>\r                       RC control packet
-  G:<ke×1000> <kt×1000> <kp×1000>\r      LQR gain update
+  GS:<ke×1000> <kt×1000> <kp×1000>\r     LQR straight-gain update
+  GT:<ke×1000> <kt×1000> <kp×1000>\r     LQR turn-gain update
 
 Controls:
   Left stick X        steer
-  Right trigger       throttle  (axis 4 on Bluetooth)
+  Right trigger       throttle  (axis 5 on USB)
   A button            emergency stop
   B button            toggle RC / autonomous
   Y button            toggle editing STRAIGHT / TURN gain set
@@ -23,7 +24,7 @@ Controls:
   RB / LB             k_psi_dot ±0.020  (of selected set)
 
 Usage:
-  python3 rc_controller_bt.py [--debug]
+  python3 rc_controller_usb.py [--debug]
 """
 
 import argparse
@@ -55,7 +56,7 @@ TRIGGER_DEADZONE = 0.05
 SEND_INTERVAL = 0.05   # 20 Hz
 
 AXIS_STEER    = 0   # left stick X
-AXIS_THROTTLE = 4   # right trigger on Bluetooth
+AXIS_THROTTLE = 5   # right trigger on USB
 
 BTN_STOP        = 0   # A
 BTN_RC_TOGGLE   = 1   # B
@@ -148,7 +149,7 @@ def controller_reader(state, done, debug):
             joystick = pygame.joystick.Joystick(0)
             joystick.init()
             print(f"Gamepad connected: {joystick.get_name()}")
-            print(f"Throttle axis: {AXIS_THROTTLE} (Bluetooth hardcoded)")
+            print(f"Throttle axis: {AXIS_THROTTLE} (USB hardcoded)")
             if debug:
                 print(f"[CTL] axes={joystick.get_numaxes()}  "
                       f"buttons={joystick.get_numbuttons()}")
@@ -307,7 +308,7 @@ def udp_sender(state, sock, esp_addr_ref, done, debug):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Xbox One (Bluetooth) → ESP8266 UDP → K66F")
+        description="Xbox One (USB) → ESP8266 UDP → K66F")
     parser.add_argument("--debug", action="store_true",
                         help="print every axis/button event and TX packet")
     args = parser.parse_args()
@@ -320,10 +321,11 @@ def main():
     sock.settimeout(1.0)
 
     print(f"Listening for ESP8266 on UDP port {UDP_PORT}...")
-    print("Controls: left stick = steer | right trigger = throttle (axis 4)")
+    print("Controls: left stick = steer | right trigger = throttle (axis 5)")
     print("          A = STOP | B = toggle RC/auto")
     print("Gain tuning: D-pad Up/Down = k_e_lat | D-pad Right/Left = k_theta_e")
     print("             RB = k_psi_dot+ | LB = k_psi_dot-")
+    print("             Y = toggle editing STRAIGHT / TURN gain set")
     print("Press Ctrl+C to quit.\n")
 
     state        = State()

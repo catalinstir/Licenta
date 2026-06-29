@@ -60,7 +60,8 @@ uint16_t CalculateSpeedFromControl(float control);
 #define LQR_PIX2M         0.006f    /* pixel → metres scale factor            */
                                      /* calibrate: measure track width in m   */
                                      /* divide by its width in pixels          */
-#define LQR_MAX_STEER     0.524f    /* maximum steering angle [rad] ≈ 30 °   */
+#define LQR_MAX_STEER      0.524f   /* maximum steering angle [rad] ≈ 30 °   */
+#define LQR_SCHEDULE_THETA 0.25f   /* |theta_e| at which full turn gains engage [rad] ≈ 14° */
 
 /** LQR controller state — one instance per controller, zero-initialise. */
 typedef struct {
@@ -106,10 +107,12 @@ void     LQRState_Update(LQRState_t *state, VectorType v1, VectorType v2);
  */
 uint16_t LQR_SteerControl(const LQRState_t *state);
 
-/** Update the LQR gain vector at runtime (values in natural units, not ×1000). */
-void LQR_SetGains(float k_e_lat, float k_theta_e, float k_psi_dot);
-/** Read the current LQR gain vector. */
-void LQR_GetGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot);
+/** Set/get straight-driving gains (used when |theta_e| ≈ 0). */
+void LQR_SetStraightGains(float k_e_lat, float k_theta_e, float k_psi_dot);
+void LQR_GetStraightGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot);
+/** Set/get cornering gains (used when |theta_e| ≥ LQR_SCHEDULE_THETA). */
+void LQR_SetTurnGains(float k_e_lat, float k_theta_e, float k_psi_dot);
+void LQR_GetTurnGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot);
 
 /* =========================================================================
  * PD speed control
