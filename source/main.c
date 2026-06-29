@@ -79,13 +79,12 @@ int main(void)
                 {
                     lqr_gains_updated = false;
                     float ke, kt, kp;
-                    LQR_GetGains(&ke, &kt, &kp);
-                    PRINTF("GAINS:");
-                    print_float(ke);
-                    PRINTF(" ");
-                    print_float(kt);
-                    PRINTF(" ");
-                    print_float(kp);
+                    PRINTF("GAINS S:");
+                    LQR_GetStraightGains(&ke, &kt, &kp);
+                    print_float(ke); PRINTF(" "); print_float(kt); PRINTF(" "); print_float(kp);
+                    PRINTF(" T:");
+                    LQR_GetTurnGains(&ke, &kt, &kp);
+                    print_float(ke); PRINTF(" "); print_float(kt); PRINTF(" "); print_float(kp);
                     PRINTF("\r\n");
                 }
 

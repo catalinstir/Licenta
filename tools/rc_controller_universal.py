@@ -10,24 +10,23 @@ Communication chain:
   Laptop ←─ UDP broadcast port 4210 ─→ ESP8266 ←─ UART 153600 ─→ K66F
 
 Protocol:
-  S\r                          emergency stop  (any state)
-  R\r                          enter RC mode
-  A\r                          return to autonomous
-  <steer> <speed>\r            RC control packet
-  G:<ke×1000> <kt×1000> <kp×1000>\r   LQR gain update (works in any state)
+  S\r                              emergency stop  (any state)
+  R\r                              enter RC mode
+  A\r                              return to autonomous
+  <steer> <speed>\r                RC control packet
+  GS:<ke×1000> <kt×1000> <kp×1000>\r  set LQR straight gains
+  GT:<ke×1000> <kt×1000> <kp×1000>\r  set LQR turn    gains
 
-Live gain tuning (works in both RC and auto modes):
-  D-pad Up    k_e_lat   +0.020
-  D-pad Down  k_e_lat   -0.020
-  D-pad Right k_theta_e +0.050
-  D-pad Left  k_theta_e -0.050
-  RB          k_psi_dot +0.020
-  LB          k_psi_dot -0.020
+Live gain scheduling (works in both RC and auto modes):
+  Y button         toggle editing STRAIGHT / TURN gain set
+  D-pad Up/Down    k_e_lat   ±0.020  on the active set
+  D-pad Right/Left k_theta_e ±0.050  on the active set
+  RB / LB          k_psi_dot ±0.020  on the active set
 
 Usage:
   python3 rc_controller_universal.py
   python3 rc_controller_universal.py --debug
-  python3 rc_controller_universal.py --throttle-axis 5   # override if auto-detect fails
+  python3 rc_controller_universal.py --throttle-axis 5
 
 Dependencies:
   pip install pygame
@@ -49,42 +48,42 @@ except ImportError:
 # PWM constants — must match firmware config.h
 # ---------------------------------------------------------------------------
 STEER_NEUTRAL = 700
-STEER_MIN     = 500
-STEER_MAX     = 900
+STEER_MIN = 500
+STEER_MAX = 900
 
 SPEED_STOPPED = 700
-SPEED_MIN     = 770
-SPEED_MAX     = 790
+SPEED_MIN = 770
+SPEED_MAX = 790
 
-STICK_DEADZONE   = 0.05
+STICK_DEADZONE = 0.05
 TRIGGER_DEADZONE = 0.05
 
-SEND_INTERVAL = 0.05   # 20 Hz
+SEND_INTERVAL = 0.05  # 20 Hz
 
-# Left stick X is axis 0 on all Xbox One variants with pygame/SDL2
-AXIS_STEER = 0
+AXIS_STEER = 0  # left stick X on all Xbox One variants with pygame/SDL2
 
-BTN_STOP      = 0   # A
-BTN_RC_TOGGLE = 1   # B
-BTN_LB        = 4   # Left Bumper  → k_psi_dot -
-BTN_RB        = 5   # Right Bumper → k_psi_dot +
+BTN_STOP      = 0  # A
+BTN_RC_TOGGLE = 1  # B
+BTN_TUNE_SWAP = 3  # Y — toggle straight/turn gain set
+BTN_LB        = 4  # Left Bumper  → k_psi_dot -
+BTN_RB        = 5  # Right Bumper → k_psi_dot +
 
 UDP_PORT = 4210
 
 # ---------------------------------------------------------------------------
-# Live gain tuning constants
+# Gain scheduling constants — must match firmware initial values in
+# control_algorithms.c (LQR_K_STRAIGHT / LQR_K_TURN)
 # ---------------------------------------------------------------------------
-K_E_LAT_INIT   = 0.410
-K_THETA_E_INIT = 0.710
-K_PSI_DOT_INIT = 0.350
+K_STRAIGHT_INIT = [0.430, 0.280, 0.180]  # [k_e_lat, k_theta_e, k_psi_dot]
+K_TURN_INIT     = [0.430, 0.700, 0.280]
 
-K_E_LAT_STEP   = 0.020   # D-pad Up/Down
-K_THETA_E_STEP = 0.050   # D-pad Right/Left
-K_PSI_DOT_STEP = 0.020   # RB/LB
+K_E_LAT_STEP   = 0.020  # D-pad Up/Down
+K_THETA_E_STEP = 0.050  # D-pad Right/Left
+K_PSI_DOT_STEP = 0.020  # RB/LB
 
-K_E_LAT_MIN   = 0.020;  K_E_LAT_MAX   = 2.000
-K_THETA_E_MIN = 0.020;  K_THETA_E_MAX = 2.000
-K_PSI_DOT_MIN = 0.000;  K_PSI_DOT_MAX = 1.000
+K_E_LAT_MIN = 0.020;  K_E_LAT_MAX = 2.000
+K_THETA_E_MIN = 0.020; K_THETA_E_MAX = 2.000
+K_PSI_DOT_MIN = 0.000; K_PSI_DOT_MAX = 1.000
 
 
 # ---------------------------------------------------------------------------
@@ -92,34 +91,24 @@ K_PSI_DOT_MIN = 0.000;  K_PSI_DOT_MAX = 1.000
 # ---------------------------------------------------------------------------
 
 def detect_trigger_axis(joystick) -> int | None:
-    """
-    Identify the right trigger axis by reading resting values.
-    Triggers rest at -1.0; the right trigger has the higher axis index.
-    Returns None if no trigger axis is found.
-    """
-    pygame.event.pump()   # flush pending events so get_axis is fresh
-    trigger_axes = [
-        i for i in range(joystick.get_numaxes())
-        if joystick.get_axis(i) < -0.9
-    ]
+    pygame.event.pump()
+    trigger_axes = [i for i in range(joystick.get_numaxes()) if joystick.get_axis(i) < -0.9]
     if not trigger_axes:
         return None
-    return max(trigger_axes)   # right trigger = highest index among triggers
+    return max(trigger_axes)
 
 
-def axis_to_pwm(value: float, deadzone: float,
-                out_min: int, out_max: int, neutral: int) -> int:
+def axis_to_pwm(value: float, deadzone: float, out_min: int, out_max: int, neutral: int) -> int:
     if abs(value) < deadzone:
         return neutral
-    sign   = 1 if value > 0 else -1
+    sign = 1 if value > 0 else -1
     scaled = (abs(value) - deadzone) / (1.0 - deadzone)
-    raw    = neutral + sign * scaled * abs(out_max - out_min) / 2
+    raw = neutral + sign * scaled * abs(out_max - out_min) / 2
     lo, hi = min(out_min, out_max), max(out_min, out_max)
     return round(max(lo, min(hi, raw)))
 
 
 def trigger_to_pwm(raw: float, deadzone: float, out_min: int, out_max: int) -> int:
-    """Triggers rest at -1.0 in pygame/SDL2; normalise to 0..1 first."""
     normalized = (raw + 1.0) / 2.0
     if normalized < deadzone:
         return SPEED_STOPPED
@@ -135,6 +124,10 @@ def fmt_gain(v: float) -> str:
     return f"{v:.3f}"
 
 
+def _fmt3(g: list) -> str:
+    return f"[{fmt_gain(g[0])} {fmt_gain(g[1])} {fmt_gain(g[2])}]"
+
+
 # ---------------------------------------------------------------------------
 # Shared state
 # ---------------------------------------------------------------------------
@@ -147,11 +140,14 @@ class State:
         self.stop  = False
         self.lock  = threading.Lock()
 
-        # LQR gains — updated by D-pad and bumpers, sent as G: packet
-        self.k_e_lat   = K_E_LAT_INIT
-        self.k_theta_e = K_THETA_E_INIT
-        self.k_psi_dot = K_PSI_DOT_INIT
-        self.gains_dirty = False   # set True whenever a gain changes
+        # Gain-scheduled LQR — two sets tuned independently.
+        # tune_straight=True  → D-pad / bumpers edit straight set
+        # tune_straight=False → D-pad / bumpers edit turn set
+        self.tune_straight = True
+        self.k_straight    = list(K_STRAIGHT_INIT)  # [k_e_lat, k_theta_e, k_psi_dot]
+        self.k_turn        = list(K_TURN_INIT)
+        self.gains_dirty_s = False  # straight set changed, needs sending
+        self.gains_dirty_t = False  # turn    set changed, needs sending
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +163,6 @@ def controller_reader(state: State, done: threading.Event,
     throttle_axis = None
 
     while not done.is_set():
-        # Wait for a controller
         if joystick is None:
             pygame.joystick.quit()
             pygame.joystick.init()
@@ -190,18 +185,15 @@ def controller_reader(state: State, done: threading.Event,
                     print(f"Throttle axis: {throttle_axis} (auto-detected)")
                 else:
                     print("WARNING: could not auto-detect trigger axis.")
-                    print(f"  Axes at startup: "
-                          f"{[round(joystick.get_axis(i), 2) for i in range(joystick.get_numaxes())]}")
+                    print(f"  Axes: {[round(joystick.get_axis(i), 2) for i in range(joystick.get_numaxes())]}")
                     print("  Re-run with --throttle-axis N to set it manually.")
 
             if debug:
-                print(f"[CTL] total axes={joystick.get_numaxes()}  "
-                      f"buttons={joystick.get_numbuttons()}")
+                print(f"[CTL] total axes={joystick.get_numaxes()}  buttons={joystick.get_numbuttons()}")
 
             with state.lock:
-                print(f"[TUNE] initial gains  k_e_lat={fmt_gain(state.k_e_lat)}"
-                      f"  k_theta_e={fmt_gain(state.k_theta_e)}"
-                      f"  k_psi_dot={fmt_gain(state.k_psi_dot)}")
+                print(f"[TUNE] S={_fmt3(state.k_straight)}  T={_fmt3(state.k_turn)}"
+                      f"  editing={'STRAIGHT' if state.tune_straight else 'TURN'}")
 
         for ev in pygame.event.get():
             if ev.type == pygame.JOYDEVICEREMOVED:
@@ -213,56 +205,40 @@ def controller_reader(state: State, done: threading.Event,
             if ev.type == pygame.JOYAXISMOTION:
                 if debug:
                     print(f"[CTL] axis={ev.axis} value={ev.value:.3f}")
-
                 with state.lock:
                     if ev.axis == AXIS_STEER:
                         raw = axis_to_pwm(-ev.value, STICK_DEADZONE,
                                           STEER_MIN, STEER_MAX, STEER_NEUTRAL)
                         state.steer = round(raw / 50) * 50
-
                     elif throttle_axis is not None and ev.axis == throttle_axis:
-                        state.speed = trigger_to_pwm(
-                            ev.value, TRIGGER_DEADZONE, SPEED_MIN, SPEED_MAX
-                        )
+                        state.speed = trigger_to_pwm(ev.value, TRIGGER_DEADZONE,
+                                                     SPEED_MIN, SPEED_MAX)
 
             elif ev.type == pygame.JOYHATMOTION:
                 hx, hy = ev.value
                 if debug:
                     print(f"[CTL] hat={ev.hat} value={ev.value}")
-
                 with state.lock:
-                    if hy == 1:      # D-pad Up → k_e_lat increase
-                        state.k_e_lat = round(clamp(
-                            state.k_e_lat + K_E_LAT_STEP,
-                            K_E_LAT_MIN, K_E_LAT_MAX), 3)
-                        state.gains_dirty = True
-                        print(f"[TUNE] k_e_lat  → {fmt_gain(state.k_e_lat)}"
-                              f"  (k_theta_e={fmt_gain(state.k_theta_e)}"
-                              f"  k_psi_dot={fmt_gain(state.k_psi_dot)})")
-                    elif hy == -1:   # D-pad Down → k_e_lat decrease
-                        state.k_e_lat = round(clamp(
-                            state.k_e_lat - K_E_LAT_STEP,
-                            K_E_LAT_MIN, K_E_LAT_MAX), 3)
-                        state.gains_dirty = True
-                        print(f"[TUNE] k_e_lat  → {fmt_gain(state.k_e_lat)}"
-                              f"  (k_theta_e={fmt_gain(state.k_theta_e)}"
-                              f"  k_psi_dot={fmt_gain(state.k_psi_dot)})")
-                    elif hx == 1:    # D-pad Right → k_theta_e increase
-                        state.k_theta_e = round(clamp(
-                            state.k_theta_e + K_THETA_E_STEP,
-                            K_THETA_E_MIN, K_THETA_E_MAX), 3)
-                        state.gains_dirty = True
-                        print(f"[TUNE] k_theta_e → {fmt_gain(state.k_theta_e)}"
-                              f"  (k_e_lat={fmt_gain(state.k_e_lat)}"
-                              f"  k_psi_dot={fmt_gain(state.k_psi_dot)})")
-                    elif hx == -1:   # D-pad Left → k_theta_e decrease
-                        state.k_theta_e = round(clamp(
-                            state.k_theta_e - K_THETA_E_STEP,
-                            K_THETA_E_MIN, K_THETA_E_MAX), 3)
-                        state.gains_dirty = True
-                        print(f"[TUNE] k_theta_e → {fmt_gain(state.k_theta_e)}"
-                              f"  (k_e_lat={fmt_gain(state.k_e_lat)}"
-                              f"  k_psi_dot={fmt_gain(state.k_psi_dot)})")
+                    g   = state.k_straight if state.tune_straight else state.k_turn
+                    tag = 'S' if state.tune_straight else 'T'
+                    if hy == 1:       # D-pad Up   → k_e_lat +
+                        g[0] = round(clamp(g[0] + K_E_LAT_STEP, K_E_LAT_MIN, K_E_LAT_MAX), 3)
+                        print(f"[TUNE/{tag}] k_e_lat   → {fmt_gain(g[0])}  {_fmt3(g)}")
+                    elif hy == -1:    # D-pad Down → k_e_lat -
+                        g[0] = round(clamp(g[0] - K_E_LAT_STEP, K_E_LAT_MIN, K_E_LAT_MAX), 3)
+                        print(f"[TUNE/{tag}] k_e_lat   → {fmt_gain(g[0])}  {_fmt3(g)}")
+                    elif hx == 1:     # D-pad Right → k_theta_e +
+                        g[1] = round(clamp(g[1] + K_THETA_E_STEP, K_THETA_E_MIN, K_THETA_E_MAX), 3)
+                        print(f"[TUNE/{tag}] k_theta_e → {fmt_gain(g[1])}  {_fmt3(g)}")
+                    elif hx == -1:    # D-pad Left → k_theta_e -
+                        g[1] = round(clamp(g[1] - K_THETA_E_STEP, K_THETA_E_MIN, K_THETA_E_MAX), 3)
+                        print(f"[TUNE/{tag}] k_theta_e → {fmt_gain(g[1])}  {_fmt3(g)}")
+                    else:
+                        continue
+                    if state.tune_straight:
+                        state.gains_dirty_s = True
+                    else:
+                        state.gains_dirty_t = True
 
             elif ev.type == pygame.JOYBUTTONDOWN:
                 if debug:
@@ -270,26 +246,37 @@ def controller_reader(state: State, done: threading.Event,
                 with state.lock:
                     if ev.button == BTN_STOP:
                         state.stop = True
+
                     elif ev.button == BTN_RC_TOGGLE:
                         new_mode = "rc" if state.mode == "auto" else "auto"
                         print(f"[CTL] mode → {new_mode}")
                         state.mode = new_mode
-                    elif ev.button == BTN_RB:   # Right Bumper → k_psi_dot increase
-                        state.k_psi_dot = round(clamp(
-                            state.k_psi_dot + K_PSI_DOT_STEP,
-                            K_PSI_DOT_MIN, K_PSI_DOT_MAX), 3)
-                        state.gains_dirty = True
-                        print(f"[TUNE] k_psi_dot → {fmt_gain(state.k_psi_dot)}"
-                              f"  (k_e_lat={fmt_gain(state.k_e_lat)}"
-                              f"  k_theta_e={fmt_gain(state.k_theta_e)})")
-                    elif ev.button == BTN_LB:   # Left Bumper → k_psi_dot decrease
-                        state.k_psi_dot = round(clamp(
-                            state.k_psi_dot - K_PSI_DOT_STEP,
-                            K_PSI_DOT_MIN, K_PSI_DOT_MAX), 3)
-                        state.gains_dirty = True
-                        print(f"[TUNE] k_psi_dot → {fmt_gain(state.k_psi_dot)}"
-                              f"  (k_e_lat={fmt_gain(state.k_e_lat)}"
-                              f"  k_theta_e={fmt_gain(state.k_theta_e)})")
+
+                    elif ev.button == BTN_TUNE_SWAP:   # Y — toggle which set D-pad edits
+                        state.tune_straight = not state.tune_straight
+                        label = 'STRAIGHT' if state.tune_straight else 'TURN'
+                        g = state.k_straight if state.tune_straight else state.k_turn
+                        print(f"[TUNE] now editing {label} gains  {_fmt3(g)}")
+
+                    elif ev.button == BTN_RB:   # k_psi_dot +
+                        g   = state.k_straight if state.tune_straight else state.k_turn
+                        tag = 'S' if state.tune_straight else 'T'
+                        g[2] = round(clamp(g[2] + K_PSI_DOT_STEP, K_PSI_DOT_MIN, K_PSI_DOT_MAX), 3)
+                        print(f"[TUNE/{tag}] k_psi_dot → {fmt_gain(g[2])}  {_fmt3(g)}")
+                        if state.tune_straight:
+                            state.gains_dirty_s = True
+                        else:
+                            state.gains_dirty_t = True
+
+                    elif ev.button == BTN_LB:   # k_psi_dot -
+                        g   = state.k_straight if state.tune_straight else state.k_turn
+                        tag = 'S' if state.tune_straight else 'T'
+                        g[2] = round(clamp(g[2] - K_PSI_DOT_STEP, K_PSI_DOT_MIN, K_PSI_DOT_MAX), 3)
+                        print(f"[TUNE/{tag}] k_psi_dot → {fmt_gain(g[2])}  {_fmt3(g)}")
+                        if state.tune_straight:
+                            state.gains_dirty_s = True
+                        else:
+                            state.gains_dirty_t = True
 
         time.sleep(0.005)
 
@@ -312,18 +299,18 @@ def udp_sender(state: State, sock: socket.socket, esp_addr_ref: list,
             continue
 
         with state.lock:
-            stop_req     = state.stop
-            mode         = state.mode
-            steer        = state.steer
-            speed        = state.speed
-            gains_dirty  = state.gains_dirty
-            ke           = state.k_e_lat
-            kt           = state.k_theta_e
-            kp           = state.k_psi_dot
+            stop_req   = state.stop
+            mode       = state.mode
+            steer      = state.steer
+            speed      = state.speed
+            dirty_s    = state.gains_dirty_s
+            dirty_t    = state.gains_dirty_t
+            ks         = list(state.k_straight)
+            kt         = list(state.k_turn)
             if stop_req:
                 state.stop = False
-            if gains_dirty:
-                state.gains_dirty = False
+            state.gains_dirty_s = False
+            state.gains_dirty_t = False
 
         if stop_req:
             sock.sendto(b"S\r", addr)
@@ -343,9 +330,14 @@ def udp_sender(state: State, sock: socket.socket, esp_addr_ref: list,
             in_rc = False
             continue
 
-        # Send gain update whenever a gain changed — works in any firmware state
-        if gains_dirty:
-            pkt = f"G:{round(ke*1000)} {round(kt*1000)} {round(kp*1000)}\r"
+        # Send whichever gain set changed — works in both RC and auto modes
+        if dirty_s:
+            pkt = f"GS:{round(ks[0]*1000)} {round(ks[1]*1000)} {round(ks[2]*1000)}\r"
+            sock.sendto(pkt.encode(), addr)
+            print(f"[TX] {pkt.strip()}")
+
+        if dirty_t:
+            pkt = f"GT:{round(kt[0]*1000)} {round(kt[1]*1000)} {round(kt[2]*1000)}\r"
             sock.sendto(pkt.encode(), addr)
             print(f"[TX] {pkt.strip()}")
 
@@ -365,10 +357,9 @@ def main():
         description="Xbox One (USB or BT) → ESP8266 UDP → K66F RC bridge")
     parser.add_argument("--debug", action="store_true",
                         help="print every axis/button event and TX packet")
-    parser.add_argument("--throttle-axis", type=int, default=None,
-                        metavar="N",
+    parser.add_argument("--throttle-axis", type=int, default=None, metavar="N",
                         help="override auto-detected right trigger axis index")
-    args  = parser.parse_args()
+    args = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -379,23 +370,21 @@ def main():
 
     print(f"Listening for ESP8266 on UDP port {UDP_PORT}...")
     print("Controls: left stick = steer | right trigger = throttle")
-    print("          A button = EMERGENCY STOP | B button = toggle RC/auto")
-    print("Gain tuning: D-pad Up/Down = k_e_lat | D-pad Right/Left = k_theta_e")
-    print("             RB = k_psi_dot+ | LB = k_psi_dot-")
+    print("          A = EMERGENCY STOP | B = toggle RC/auto")
+    print("Gain scheduling: Y = swap STRAIGHT/TURN set")
+    print("  D-pad Up/Down = k_e_lat | D-pad Right/Left = k_theta_e | RB/LB = k_psi_dot")
     print("Press Ctrl+C to quit.\n")
 
     state        = State()
     done         = threading.Event()
     esp_addr_ref = [None]
 
-    reader = threading.Thread(
-        target=controller_reader,
-        args=(state, done, args.debug, args.throttle_axis),
-        daemon=True)
-    sender = threading.Thread(
-        target=udp_sender,
-        args=(state, sock, esp_addr_ref, done, args.debug),
-        daemon=True)
+    reader = threading.Thread(target=controller_reader,
+                              args=(state, done, args.debug, args.throttle_axis),
+                              daemon=True)
+    sender = threading.Thread(target=udp_sender,
+                              args=(state, sock, esp_addr_ref, done, args.debug),
+                              daemon=True)
 
     reader.start()
     sender.start()

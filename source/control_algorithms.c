@@ -152,26 +152,51 @@ uint16_t CalculateSpeedFromControl(float control)
  *
  * States: [e_lat (m), theta_e (rad), psi_dot (rad/s)]
  */
-/* ---- paste lqr_tuning.py output here ---------------------------------- */
-static float LQR_K[LQR_NUM_STATES] = {
-    0.41000000f, /* k_e_lat   [rad/m]       DARE×1.23 L=0.25m v0=1.61m/s dt=0.558s */
-    0.71000000f, /* k_theta_e [rad/rad]     DARE×1.00 */
-    0.35000000f  /* k_psi_dot [rad/(rad/s)] DARE×0.83 */
+/* ---- Gain-scheduled LQR: two operating points blended on |theta_e| ---- *
+ * Straight gains: used when |theta_e| ~ 0 (on a straight).               *
+ *   Lower k_theta_e reduces sensitivity to heading noise → no wild steer. *
+ * Turn gains: used when |theta_e| >= LQR_SCHEDULE_THETA (in a corner).   *
+ *   Higher k_theta_e gives prompt turn initiation and hold.               *
+ * Blend is linear: blend = clamp(|theta_e| / LQR_SCHEDULE_THETA, 0, 1)   *
+ * Effective K = K_STRAIGHT + blend * (K_TURN - K_STRAIGHT)               */
+static float LQR_K_STRAIGHT[LQR_NUM_STATES] = {
+    0.43000000f, /* k_e_lat   — same lateral stiffness on straight          */
+    0.28000000f, /* k_theta_e — low: ignores small heading noise            */
+    0.18000000f  /* k_psi_dot — light damping on straight                   */
+};
+static float LQR_K_TURN[LQR_NUM_STATES] = {
+    0.43000000f, /* k_e_lat   — same lateral stiffness in turn              */
+    0.70000000f, /* k_theta_e — high: prompt turn initiation and hold       */
+    0.28000000f  /* k_psi_dot — more damping to prevent overshoot in turn   */
 };
 /* ----------------------------------------------------------------------- */
 
-void LQR_SetGains(float k_e_lat, float k_theta_e, float k_psi_dot)
+void LQR_SetStraightGains(float k_e_lat, float k_theta_e, float k_psi_dot)
 {
-    LQR_K[0] = k_e_lat;
-    LQR_K[1] = k_theta_e;
-    LQR_K[2] = k_psi_dot;
+    LQR_K_STRAIGHT[0] = k_e_lat;
+    LQR_K_STRAIGHT[1] = k_theta_e;
+    LQR_K_STRAIGHT[2] = k_psi_dot;
 }
 
-void LQR_GetGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot)
+void LQR_GetStraightGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot)
 {
-    *k_e_lat   = LQR_K[0];
-    *k_theta_e = LQR_K[1];
-    *k_psi_dot = LQR_K[2];
+    *k_e_lat   = LQR_K_STRAIGHT[0];
+    *k_theta_e = LQR_K_STRAIGHT[1];
+    *k_psi_dot = LQR_K_STRAIGHT[2];
+}
+
+void LQR_SetTurnGains(float k_e_lat, float k_theta_e, float k_psi_dot)
+{
+    LQR_K_TURN[0] = k_e_lat;
+    LQR_K_TURN[1] = k_theta_e;
+    LQR_K_TURN[2] = k_psi_dot;
+}
+
+void LQR_GetTurnGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot)
+{
+    *k_e_lat   = LQR_K_TURN[0];
+    *k_theta_e = LQR_K_TURN[1];
+    *k_psi_dot = LQR_K_TURN[2];
 }
 
 float CalculateLaneHeading(VectorType v1, VectorType v2)
@@ -238,9 +263,18 @@ void LQRState_Update(LQRState_t *state, VectorType v1, VectorType v2)
 
 uint16_t LQR_SteerControl(const LQRState_t *state)
 {
+    /* Gain scheduling: blend straight and turn gains on |theta_e|.
+     * blend=0 → pure straight gains, blend=1 → pure turn gains. */
+    float blend = fabsf(state->theta_e) / LQR_SCHEDULE_THETA;
+    if (blend > 1.0f)
+        blend = 1.0f;
+
+    float k0 = LQR_K_STRAIGHT[0] + blend * (LQR_K_TURN[0] - LQR_K_STRAIGHT[0]);
+    float k1 = LQR_K_STRAIGHT[1] + blend * (LQR_K_TURN[1] - LQR_K_STRAIGHT[1]);
+    float k2 = LQR_K_STRAIGHT[2] + blend * (LQR_K_TURN[2] - LQR_K_STRAIGHT[2]);
+
     /* u = -K * x */
-    float delta =
-        -(LQR_K[0] * state->e_lat + LQR_K[1] * state->theta_e + LQR_K[2] * state->psi_dot);
+    float delta = -(k0 * state->e_lat + k1 * state->theta_e + k2 * state->psi_dot);
 
     delta = -delta;
 
