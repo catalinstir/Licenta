@@ -156,14 +156,14 @@ uint16_t CalculateSpeedFromControl(float control)
  * blend = clamp(|theta_e| / LQR_SCHEDULE_THETA, 0, 1)
  * K_eff = K_STRAIGHT + blend * (K_TURN - K_STRAIGHT)               */
 static float LQR_K_STRAIGHT[LQR_NUM_STATES] = {
-    0.41000000f, /* k_e_lat   — lateral stiffness on straight          */
-    0.28000000f, /* k_theta_e — low: tolerates heading noise           */
-    0.18000000f  /* k_psi_dot — light damping on straight              */
+    0.40000000f, /* k_e_lat   — tested at fixed PWM 7.7               */
+    0.50000000f, /* k_theta_e — safe at small |theta_e|, no saturation */
+    0.24000000f  /* k_psi_dot — tested at fixed PWM 7.7               */
 };
 static float LQR_K_TURN[LQR_NUM_STATES] = {
-    0.41000000f, /* k_e_lat   — same lateral stiffness in turn         */
-    0.45000000f, /* k_theta_e — tested value; 0.71 was saturating      */
-    0.28000000f  /* k_psi_dot — more damping to prevent overshoot      */
+    0.43000000f, /* k_e_lat   — tested at PWM 7.8 + speed coupling     */
+    0.45000000f, /* k_theta_e — lower: prevents saturation in corners   */
+    0.25000000f  /* k_psi_dot — tested at PWM 7.8 + speed coupling     */
 };
 /* ----------------------------------------------------------------------- */
 
