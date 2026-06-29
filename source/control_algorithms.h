@@ -112,51 +112,40 @@ void LQR_SetGains(float k_e_lat, float k_theta_e, float k_psi_dot);
 void LQR_GetGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot);
 
 /* =========================================================================
- * PI speed control
+ * PD speed control
  * =========================================================================
  *
- * A simple PI controller that tracks a target RPM using Hall sensor
- * feedback (HallSensor_GetRPM()).
+ * Tracks a target RPM using Hall sensor feedback (HallSensor_GetRPM()).
+ * No integral term — avoids windup against the stall floor and is simpler
+ * to tune.  Steady-state error is acceptable for racing.
  *
- * Output is a PWM duty value in the same format as the rest of the system
- * (percentage × 100, e.g. 770 = 7.70 %).
+ * Feedforward: PWM_MIN_SPEED × 100 (the PWM that yields ~PD_TARGET_RPM on
+ * a flat surface with a charged battery).  PD correction adds on top.
+ *
+ * Output is clamped to [PWM_MIN_SPEED×100, PWM_MAX_SPEED×100].
  * ========================================================================= */
 
-/** PI speed controller state and parameters — zero-initialise before use. */
 typedef struct {
-    float Kp;            /**< proportional gain                               */
-    float Ki;            /**< integral gain                                   */
-    float integral;      /**< accumulated integral term                       */
-    float integral_max;  /**< anti-windup clamp [same units as output]        */
-    float output_min;    /**< minimum PWM output (percentage × 100)          */
-    float output_max;    /**< maximum PWM output (percentage × 100)          */
-} PIController_t;
+    float Kp;           /**< proportional gain [PWM_unit / RPM]              */
+    float Kd;           /**< derivative gain   [PWM_unit / (RPM / LQR_DT)]  */
+    float prev_error;   /**< error from previous cycle for finite-difference  */
+    float output_min;   /**< lower PWM clamp (stall floor, percentage × 100) */
+    float output_max;   /**< upper PWM clamp (percentage × 100)              */
+    bool  initialized;  /**< false until the first call (skips first Kd term) */
+} PDController_t;
 
 /**
- * @brief Initialise a PI speed controller.
+ * @brief Run one PD speed control step.
  *
- * @param pi          Controller to initialise
- * @param kp          Proportional gain [PWM_unit / RPM]
- * @param ki          Integral gain     [PWM_unit / (RPM·s)]
- * @param out_min     Lower output clamp (percentage × 100)
- * @param out_max     Upper output clamp (percentage × 100)
- */
-void     PIController_Init(PIController_t *pi,
-                            float kp, float ki,
-                            float out_min, float out_max);
-
-/**
- * @brief Run one PI speed control step.
+ * Call once per LQR cycle after SpeedSteeringCoupling() has reduced the
+ * target RPM for cornering.
  *
- * Intended to be called at the same rate as LQR_DT.
- *
- * @param pi          Controller state (in/out)
- * @param target_rpm  Desired wheel speed [RPM]
+ * @param pd          Controller state (in/out)
+ * @param target_rpm  Desired wheel speed after coupling reduction [RPM]
  * @param current_rpm Measured wheel speed from HallSensor_GetRPM() [RPM]
- * @return            Steering-motor PWM duty × 100
+ * @return            Drive motor PWM duty × 100
  */
-uint16_t PI_SpeedControl(PIController_t *pi,
-                          float target_rpm, float current_rpm);
+uint16_t PD_SpeedControl(PDController_t *pd, float target_rpm, float current_rpm);
 
 /* =========================================================================
  * Speed–steering coupling

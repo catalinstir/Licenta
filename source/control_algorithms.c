@@ -259,38 +259,28 @@ uint16_t LQR_SteerControl(const LQRState_t *state)
 }
 
 /* =========================================================================
- * PI speed control
+ * PD speed control
  * ========================================================================= */
 
-void PIController_Init(PIController_t *pi, float kp, float ki, float out_min, float out_max)
-{
-    pi->Kp           = kp;
-    pi->Ki           = ki;
-    pi->integral     = 0.0f;
-    pi->integral_max = (ki > 0.0f) ? ((out_max - out_min) / ki) : 0.0f;
-    pi->output_min   = out_min;
-    pi->output_max   = out_max;
-}
-
-uint16_t PI_SpeedControl(PIController_t *pi, float target_rpm, float current_rpm)
+uint16_t PD_SpeedControl(PDController_t *pd, float target_rpm, float current_rpm)
 {
     float error = target_rpm - current_rpm;
 
-    pi->integral += error * LQR_DT;
+    float derivative = 0.0f;
+    if (pd->initialized)
+        derivative = (error - pd->prev_error) / LQR_DT;
 
-    /* Anti-windup: clamp integral */
-    if (pi->integral > pi->integral_max)
-        pi->integral = pi->integral_max;
-    if (pi->integral < -pi->integral_max)
-        pi->integral = -pi->integral_max;
+    pd->prev_error  = error;
+    pd->initialized = true;
 
-    float output = pi->Kp * error + pi->Ki * pi->integral;
+    /* Feedforward: base PWM that holds ~PD_TARGET_RPM on a flat surface.
+     * PD correction is added on top to compensate for load and battery droop. */
+    float output = PWM_MIN_SPEED * 100.0f + pd->Kp * error + pd->Kd * derivative;
 
-    /* Clamp output to allowed PWM range */
-    if (output > pi->output_max)
-        output = pi->output_max;
-    if (output < pi->output_min)
-        output = pi->output_min;
+    if (output > pd->output_max)
+        output = pd->output_max;
+    if (output < pd->output_min)
+        output = pd->output_min;
 
     return (uint16_t)output;
 }
