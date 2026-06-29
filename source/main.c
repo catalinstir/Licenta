@@ -48,6 +48,14 @@ int main(void)
     static uint16_t  last_speed = 770;
     static uint32_t  intersection_entry_ms = 0;
     static LQRState_t lqr_state = {0};
+    static PDController_t pd_speed = {
+        .Kp          = PD_SPEED_KP,
+        .Kd          = PD_SPEED_KD,
+        .prev_error  = 0.0f,
+        .output_min  = PWM_MIN_SPEED * 100.0f,
+        .output_max  = PWM_MAX_SPEED * 100.0f,
+        .initialized = false,
+    };
 
     while (1)
     {
@@ -79,13 +87,12 @@ int main(void)
                 {
                     lqr_gains_updated = false;
                     float ke, kt, kp;
-                    LQR_GetGains(&ke, &kt, &kp);
-                    PRINTF("GAINS:");
-                    print_float(ke);
-                    PRINTF(" ");
-                    print_float(kt);
-                    PRINTF(" ");
-                    print_float(kp);
+                    PRINTF("GAINS S:");
+                    LQR_GetStraightGains(&ke, &kt, &kp);
+                    print_float(ke); PRINTF(" "); print_float(kt); PRINTF(" "); print_float(kp);
+                    PRINTF(" T:");
+                    LQR_GetTurnGains(&ke, &kt, &kp);
+                    print_float(ke); PRINTF(" "); print_float(kt); PRINTF(" "); print_float(kp);
                     PRINTF("\r\n");
                 }
 
@@ -158,8 +165,10 @@ int main(void)
             case STATE_CONTROL:
             {
                 LQRState_Update(&lqr_state, Vector1, Vector2);
-                uint16_t steer_duty = LQR_SteerControl(&lqr_state);
-                uint16_t speed_duty = CalculateSpeedFromDuty(steer_duty);
+                uint16_t steer_duty    = LQR_SteerControl(&lqr_state);
+                float    target_rpm    = SpeedSteeringCoupling(PD_TARGET_RPM, steer_duty);
+                uint16_t speed_duty    = PD_SpeedControl(&pd_speed, target_rpm,
+                                                         HallSensor_GetRPM());
                 PRINTF("-STEER:%d SPEED:%d e_lat:", steer_duty, speed_duty);
                 print_float(lqr_state.e_lat);
                 PRINTF(" theta_e:");

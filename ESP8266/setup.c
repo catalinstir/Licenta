@@ -17,8 +17,8 @@ volatile bool          g_newPulse     = false;
 /* Reject intervals shorter than this — suppresses noise/bounce on the signal line */
 #define HALL_MIN_INTERVAL_US 3000UL
 
-/* The disc magnet produces 10 pulses per wheel revolution (10 pole pairs) */
-#define POLES_PER_REV 10UL
+/* The disc magnet produces 1 pulse per wheel revolution (1 pole pair) */
+#define POLES_PER_REV 1UL
 
 void IRAM_ATTR hallISR()
 {

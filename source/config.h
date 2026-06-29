@@ -58,6 +58,11 @@
 #define PWM_MIN_SPEED 7.7f
 #define PWM_MAX_SPEED 7.8f
 
+/* PD speed controller */
+#define PD_TARGET_RPM  440.0f   /* nominal straight-line target [RPM]          */
+#define PD_SPEED_KP    0.05f    /* proportional gain [PWM_unit / RPM]          */
+#define PD_SPEED_KD    0.02f    /* derivative gain   [PWM_unit / (RPM/LQR_DT)] */
+
 /* PID steering gains — hardware-tuned */
 #define PID_STEERING_KP 0.045f
 #define PID_STEERING_KI 0.0f

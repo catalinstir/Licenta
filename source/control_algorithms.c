@@ -152,26 +152,44 @@ uint16_t CalculateSpeedFromControl(float control)
  *
  * States: [e_lat (m), theta_e (rad), psi_dot (rad/s)]
  */
-/* ---- paste lqr_tuning.py output here ---------------------------------- */
-static float LQR_K[LQR_NUM_STATES] = {
-    0.41000000f, /* k_e_lat   [rad/m]       DARE×1.23 L=0.25m v0=1.61m/s dt=0.558s */
-    0.71000000f, /* k_theta_e [rad/rad]     DARE×1.00 */
-    0.35000000f  /* k_psi_dot [rad/(rad/s)] DARE×0.83 */
+/* ---- Gain-scheduled LQR: two operating points blended on |theta_e| -----
+ * blend = clamp(|theta_e| / LQR_SCHEDULE_THETA, 0, 1)
+ * K_eff = K_STRAIGHT + blend * (K_TURN - K_STRAIGHT)               */
+static float LQR_K_STRAIGHT[LQR_NUM_STATES] = {
+    0.40000000f, /* k_e_lat   — tested at fixed PWM 7.7               */
+    0.50000000f, /* k_theta_e — safe at small |theta_e|, no saturation */
+    0.24000000f  /* k_psi_dot — tested at fixed PWM 7.7               */
+};
+static float LQR_K_TURN[LQR_NUM_STATES] = {
+    0.43000000f, /* k_e_lat   — tested at PWM 7.8 + speed coupling     */
+    0.45000000f, /* k_theta_e — lower: prevents saturation in corners   */
+    0.25000000f  /* k_psi_dot — tested at PWM 7.8 + speed coupling     */
 };
 /* ----------------------------------------------------------------------- */
 
-void LQR_SetGains(float k_e_lat, float k_theta_e, float k_psi_dot)
+void LQR_SetStraightGains(float k_e_lat, float k_theta_e, float k_psi_dot)
 {
-    LQR_K[0] = k_e_lat;
-    LQR_K[1] = k_theta_e;
-    LQR_K[2] = k_psi_dot;
+    LQR_K_STRAIGHT[0] = k_e_lat;
+    LQR_K_STRAIGHT[1] = k_theta_e;
+    LQR_K_STRAIGHT[2] = k_psi_dot;
 }
-
-void LQR_GetGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot)
+void LQR_GetStraightGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot)
 {
-    *k_e_lat   = LQR_K[0];
-    *k_theta_e = LQR_K[1];
-    *k_psi_dot = LQR_K[2];
+    *k_e_lat   = LQR_K_STRAIGHT[0];
+    *k_theta_e = LQR_K_STRAIGHT[1];
+    *k_psi_dot = LQR_K_STRAIGHT[2];
+}
+void LQR_SetTurnGains(float k_e_lat, float k_theta_e, float k_psi_dot)
+{
+    LQR_K_TURN[0] = k_e_lat;
+    LQR_K_TURN[1] = k_theta_e;
+    LQR_K_TURN[2] = k_psi_dot;
+}
+void LQR_GetTurnGains(float *k_e_lat, float *k_theta_e, float *k_psi_dot)
+{
+    *k_e_lat   = LQR_K_TURN[0];
+    *k_theta_e = LQR_K_TURN[1];
+    *k_psi_dot = LQR_K_TURN[2];
 }
 
 float CalculateLaneHeading(VectorType v1, VectorType v2)
@@ -238,9 +256,15 @@ void LQRState_Update(LQRState_t *state, VectorType v1, VectorType v2)
 
 uint16_t LQR_SteerControl(const LQRState_t *state)
 {
+    float blend = fabsf(state->theta_e) / LQR_SCHEDULE_THETA;
+    if (blend > 1.0f) blend = 1.0f;
+
+    float k0 = LQR_K_STRAIGHT[0] + blend * (LQR_K_TURN[0] - LQR_K_STRAIGHT[0]);
+    float k1 = LQR_K_STRAIGHT[1] + blend * (LQR_K_TURN[1] - LQR_K_STRAIGHT[1]);
+    float k2 = LQR_K_STRAIGHT[2] + blend * (LQR_K_TURN[2] - LQR_K_STRAIGHT[2]);
+
     /* u = -K * x */
-    float delta =
-        -(LQR_K[0] * state->e_lat + LQR_K[1] * state->theta_e + LQR_K[2] * state->psi_dot);
+    float delta = -(k0 * state->e_lat + k1 * state->theta_e + k2 * state->psi_dot);
 
     delta = -delta;
 
@@ -259,38 +283,30 @@ uint16_t LQR_SteerControl(const LQRState_t *state)
 }
 
 /* =========================================================================
- * PI speed control
+ * PD speed control
  * ========================================================================= */
 
-void PIController_Init(PIController_t *pi, float kp, float ki, float out_min, float out_max)
-{
-    pi->Kp           = kp;
-    pi->Ki           = ki;
-    pi->integral     = 0.0f;
-    pi->integral_max = (ki > 0.0f) ? ((out_max - out_min) / ki) : 0.0f;
-    pi->output_min   = out_min;
-    pi->output_max   = out_max;
-}
-
-uint16_t PI_SpeedControl(PIController_t *pi, float target_rpm, float current_rpm)
+uint16_t PD_SpeedControl(PDController_t *pd, float target_rpm, float current_rpm)
 {
     float error = target_rpm - current_rpm;
 
-    pi->integral += error * LQR_DT;
+    float derivative = 0.0f;
+    if (pd->initialized && current_rpm > 0.0f)
+        derivative = (error - pd->prev_error) / LQR_DT;
 
-    /* Anti-windup: clamp integral */
-    if (pi->integral > pi->integral_max)
-        pi->integral = pi->integral_max;
-    if (pi->integral < -pi->integral_max)
-        pi->integral = -pi->integral_max;
+    /* Freeze state on sensor dropout — avoids false derivative spike on recovery */
+    if (current_rpm > 0.0f)
+        pd->prev_error = error;
+    pd->initialized = true;
 
-    float output = pi->Kp * error + pi->Ki * pi->integral;
+    /* Feedforward: base PWM that holds ~PD_TARGET_RPM on a flat surface.
+     * PD correction is added on top to compensate for load and battery droop. */
+    float output = PWM_MIN_SPEED * 100.0f + pd->Kp * error + pd->Kd * derivative;
 
-    /* Clamp output to allowed PWM range */
-    if (output > pi->output_max)
-        output = pi->output_max;
-    if (output < pi->output_min)
-        output = pi->output_min;
+    if (output > pd->output_max)
+        output = pd->output_max;
+    if (output < pd->output_min)
+        output = pd->output_min;
 
     return (uint16_t)output;
 }

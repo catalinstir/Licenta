@@ -42,13 +42,19 @@ void UART4_UserIRQHandler(void)
             if (sscanf((const char *)&rxBuffer[2], "%d", &rpm_int) == 1)
                 HallSensor_SetExternalRPM((float)rpm_int);
         }
-        else if (rxIndex >= 5 && rxBuffer[0] == 'G' && rxBuffer[1] == ':')
+        else if (rxIndex >= 6 && rxBuffer[0] == 'G' &&
+                 (rxBuffer[1] == 'S' || rxBuffer[1] == 'T') && rxBuffer[2] == ':')
         {
-            /* LQR gain packet from rc_controller: "G:<ke_x1000> <kt_x1000> <kp_x1000>" */
+            /* Gain-schedule packets: "GS:<ke> <kt> <kp>" or "GT:<ke> <kt> <kp>"
+             * Values are integers × 1000 to avoid float sscanf in ISR. */
             int ke_i, kt_i, kp_i;
-            if (sscanf((const char *)&rxBuffer[2], "%d %d %d", &ke_i, &kt_i, &kp_i) == 3)
+            if (sscanf((const char *)&rxBuffer[3], "%d %d %d", &ke_i, &kt_i, &kp_i) == 3)
             {
-                LQR_SetGains(ke_i / 1000.0f, kt_i / 1000.0f, kp_i / 1000.0f);
+                float ke = ke_i / 1000.0f, kt = kt_i / 1000.0f, kp = kp_i / 1000.0f;
+                if (rxBuffer[1] == 'S')
+                    LQR_SetStraightGains(ke, kt, kp);
+                else
+                    LQR_SetTurnGains(ke, kt, kp);
                 lqr_gains_updated = true;
             }
         }
